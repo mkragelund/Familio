@@ -5,7 +5,7 @@
   "targets": {
     "gen-lang-client-0858229520": {
       "hosting": {
-        "familio": ["familio"]
+        "familio": ["minfamilio"]
       }
     }
   }

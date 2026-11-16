@@ -1,11 +1,11 @@
 // Familio – konfiguration
 //
 // Indsæt web-app-konfigurationen fra Firebase (projekt "MK Work" › Project settings › Your apps › Familio).
-// Sæt authDomain til 'familio.web.app', så Google-login også virker, når appen er installeret på hjemmeskærmen.
+// Sæt authDomain til 'minfamilio.web.app', så Google-login også virker, når appen er installeret på hjemmeskærmen.
 // Så længe apiKey starter med "INDSÆT", kører appen i DEMO-tilstand: alt gemmes kun lokalt i browseren.
 export const FIREBASE_CONFIG = {
   apiKey: 'INDSÆT_API_KEY',
-  authDomain: 'familio.web.app',
+  authDomain: 'minfamilio.web.app',
   projectId: '',
   storageBucket: '',
   messagingSenderId: '',

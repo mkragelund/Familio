@@ -7,6 +7,8 @@ import {
 } from './model.js';
 import { esc, pal, icon, logo, avatar, confettiHtml, pick, autoUpdate, justUpdated, toast } from './ui.js';
 import { APP_VERSION } from './config.js';
+import { play, unlockAudio } from './sound.js';
+function sfx(name) { play(name, S.family && S.family.settings, S.dimShown); }
 
 var store;
 var S = {
@@ -93,6 +95,7 @@ function isSaver() {
   return !!S.family && m > 0 && !isNight() && Date.now() - lastActive > m * 60000;
 }
 function onActivity() {
+  unlockAudio();
   var wasDim = S.dimShown;
   lastActive = Date.now();
   if (wasDim) { requestWake(); render(); }
@@ -603,6 +606,7 @@ function checkBonus(list) {
       week: pt.week, month: pt.month
     };
     renderCele();
+    sfx('bonus');
     clearTimeout(celeTimer);
     celeTimer = setTimeout(function () { if (S.cele && S.cele.key === a.id) { S.cele = null; renderCele(); } }, 9000);
   });
@@ -639,6 +643,7 @@ function toggleChore(date, choreId, kidId) {
     week: before.week + (inWeek ? pts : 0), month: before.month + (inMonth ? pts : 0)
   };
   renderCele();
+  sfx(big ? 'goal' : 'done');
   clearTimeout(celeTimer);
   celeTimer = setTimeout(function () { if (S.cele && S.cele.key === id) { S.cele = null; renderCele(); } }, big ? 9000 : 5000);
 }
@@ -667,9 +672,15 @@ function onClick(e) {
     var date = el.getAttribute('data-date');
     var id = packedId(date, el.getAttribute('data-ev'), el.getAttribute('data-idx'));
     if (S.packed[id]) { store.del(F('packed/' + id)).catch(report); }
-    else { store.set(F('packed/' + id), { date: date, at: Date.now() }).catch(report); }
+    else {
+      store.set(F('packed/' + id), { date: date, at: Date.now() }).catch(report);
+      var ev0 = S.events.filter(function (x) { return x.id === el.getAttribute('data-ev'); })[0];
+      var rest = ((ev0 && ev0.pack) || []).filter(function (it, j) { var pid = packedId(date, ev0.id, j); return pid !== id && !S.packed[pid]; }).length;
+      sfx(rest === 0 ? 'packed' : 'tick');
+    }
   }
   else if (a === 'undo') {
+    sfx('undo');
     if (S.cele && !S.cele.bonus) { store.del(F('completions/' + S.cele.key)).catch(report); }
     S.cele = null; renderCele();
   }

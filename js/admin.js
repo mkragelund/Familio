@@ -514,6 +514,14 @@ function renderSettings() {
     }).join('') + '</select></div>' +
     '<div class="toggle"><span class="grow"><b>Ny uge starter automatisk</b><span>Natten mellem søndag og mandag</span></span></div></div></div>';
 
+  var so = st.sound || {};
+  b += '<div class="section"><span class="label">Lyd på tavlen</span><div class="card" style="padding:4px 16px">' +
+    '<label class="toggle"><span class="grow"><b>Lydeffekter</b><span>Blødt "pling" ved pligter, fanfare ved nåede mål</span></span><input type="checkbox" data-setb="sound.on"' + (so.on === false ? '' : ' checked') + '></label>' +
+    '<div class="toggle"><span class="grow"><b>Lydstyrke</b></span><label class="sr" for="s-vol">Lydstyrke</label><select class="input" id="s-vol" data-set="sound.vol" style="width:140px;height:44px">' +
+    [['lav', 'Lav'], ['mellem', 'Mellem'], ['hoej', 'Høj']].map(function (o) { return '<option value="' + o[0] + '"' + ((so.vol || 'lav') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
+    '<div class="row2" style="padding:10px 0 12px"><div class="field"><label for="s-qf">Stille fra</label><input class="input" id="s-qf" type="time" data-set="sound.quietFrom" value="' + esc(so.quietFrom || '20:00') + '"></div>' +
+    '<div class="field"><label for="s-qt">Stille til</label><input class="input" id="s-qt" type="time" data-set="sound.quietTo" value="' + esc(so.quietTo || '07:00') + '"></div></div></div></div>';
+
   b += '<div class="section"><span class="label">Chauffører</span><div class="chips">';
   (fam.drivers || []).forEach(function (d) {
     b += '<button class="chip" data-a="driver-del" data-v="' + esc(d) + '" aria-label="Fjern ' + esc(d) + '">' + esc(d) + ' ✕</button>';
@@ -594,6 +602,11 @@ function onChange(e) {
     var val = /Pts$/.test(parts[1]) ? Math.max(0, parseInt(t.value, 10) || 0) : t.value.trim();
     var upd = {}; upd['goals.' + parts[0] + '.' + parts[1]] = val;
     fs.update('', upd).then(function () { toast('Gemt'); }).catch(fail);
+    return;
+  }
+  if (t.hasAttribute('data-setb')) {
+    var ub = {}; ub['settings.' + t.getAttribute('data-setb')] = t.checked;
+    fs.update('', ub).then(function () { toast(t.checked ? 'Lyd slået til' : 'Lyd slået fra'); }).catch(fail);
     return;
   }
   if (t.hasAttribute('data-set')) {

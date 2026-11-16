@@ -3,7 +3,7 @@
 var CACHE = 'familio-1.4.0';
 var SHELL = [
   './', './index.html', './tablet.html', './css/familio.css',
-  './js/config.js', './js/model.js', './js/store.js', './js/ui.js', './js/admin.js', './js/tablet.js',
+  './js/config.js', './js/model.js', './js/store.js', './js/ui.js', './js/admin.js', './js/tablet.js', './js/sound.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
   './manifest.webmanifest', './manifest-tablet.webmanifest'
 ];

@@ -64,7 +64,7 @@ a { color: #1F4FA8; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ================= TABLET ================= */
-.tb { height: 100vh; height: 100dvh; display: flex; flex-direction: column; gap: 12px; padding: 16px 18px calc(22px + env(safe-area-inset-bottom)); overflow: hidden; position: relative; }
+.tb { height: 100vh; height: 100dvh; display: flex; flex-direction: column; gap: 12px; padding: calc(16px + env(safe-area-inset-top)) 18px calc(22px + env(safe-area-inset-bottom)); overflow: hidden; position: relative; }
 .tb-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-shrink: 0; }
 .tb-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .tb-brand .name { display: flex; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 800; letter-spacing: .06em; color: var(--muted); }
@@ -291,3 +291,39 @@ a { color: #1F4FA8; }
 .packbig { min-height: 64px; border: 2px solid #E4E0D7; border-radius: 16px; display: flex; align-items: center; gap: 14px; padding: 0 18px; font-size: 20px; font-weight: 800; text-align: left; }
 .packbig .box { width: 30px; height: 30px; border-radius: 8px; border: 3px solid; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
 .packbig.on .lbl { text-decoration: line-through; opacity: .7; }
+
+/* Tablet: mørk statuslinje øverst (iOS viser hvid tekst), og helt mørkt i nat/pauseskærm */
+.tb::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: #1F2430; z-index: 40; }
+html.dark, html.dark body { background: #0B0D12; }
+.night, .saver { padding-top: calc(40px + env(safe-area-inset-top)); padding-bottom: calc(40px + env(safe-area-inset-bottom)); }
+.saver { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; color: #8A90A2; z-index: 60; display: flex; align-items: center; justify-content: center; border: 0; width: 100%; font-family: inherit; }
+.saver .clock { font-family: var(--display); font-weight: 500; font-size: 96px; line-height: 1; color: #6B7080; }
+.saver .sub { font-size: 20px; font-weight: 700; color: #5B6070; }
+.saver .hintn { font-size: 13px; font-weight: 600; color: #4A4F5E; margin-top: 8px; }
+
+/* Tablet: I dag */
+.dayview { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 14px; margin-top: 12px; }
+.dv-left { background: #fff; border-radius: 20px; padding: 18px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; min-height: 0; box-shadow: 0 1px 2px rgba(31,36,48,.08); }
+.dv-date { display: flex; align-items: baseline; gap: 12px; }
+.dv-date .display { font-size: 34px; line-height: 1; }
+.dv-date span:last-child { font-size: 18px; font-weight: 700; color: var(--muted); }
+.dv-meal { background: var(--meal); color: var(--meal-text); border-radius: 16px; padding: 12px 16px; display: flex; align-items: center; gap: 14px; }
+.dv-meal b { display: block; font-family: var(--display); font-weight: 500; font-size: 24px; color: var(--ink); line-height: 1.15; }
+.dv-prog { display: flex; flex-direction: column; gap: 8px; }
+.dv-ev { border-radius: 14px; padding: 10px 12px; display: flex; align-items: center; gap: 12px; }
+.dv-ev .tm { font-weight: 800; font-size: 15px; width: 104px; flex-shrink: 0; }
+.dv-ev .mid { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.dv-ev .mid b { font-size: 18px; }
+.dv-ev .mid span { font-size: 14px; font-weight: 700; }
+.dv-ev.x .mid b { text-decoration: line-through; }
+.dv-ev .packopen { margin-top: 0; }
+.dv-right { display: grid; gap: 12px; min-height: 0; }
+.dv-kid { background: #fff; border-radius: 20px; padding: 12px; display: flex; flex-direction: column; gap: 7px; overflow-y: auto; min-height: 0; box-shadow: 0 1px 2px rgba(31,36,48,.08); }
+.dv-kidhead { border: 0; background: transparent; display: flex; align-items: center; gap: 10px; padding: 2px 2px 4px; text-align: left; font: inherit; color: var(--ink); min-height: 44px; }
+.dv-kidhead b { flex: 1; font-family: var(--display); font-weight: 600; font-size: 20px; }
+.dv-kidhead span { font-weight: 800; font-size: 16px; }
+.dv-chore { min-height: 50px; border-radius: 14px; border: 2px solid; display: flex; align-items: center; gap: 10px; padding: 0 12px; text-align: left; font-weight: 800; font-size: 15px; }
+.dv-chore .l { flex: 1; }
+.dv-chore .p { font-size: 14px; }
+.tb-nav .inner { grid-template-columns: repeat(5, minmax(0, 1fr)); width: 820px; }
+.tb-nav button { font-size: 15px; gap: 6px; }

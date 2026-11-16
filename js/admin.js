@@ -503,6 +503,12 @@ function renderSettings() {
     '<div class="toggle"><span class="grow"><b>Nattilstand</b><span>Skærmen dæmpes med ur og morgendagens plan</span></span></div>' +
     '<div class="row2" style="padding-bottom:12px"><div class="field"><label for="s-nf">Fra</label><input class="input" id="s-nf" type="time" data-set="nightFrom" value="' + esc(st.nightFrom || '21:00') + '"></div>' +
     '<div class="field"><label for="s-nt">Til</label><input class="input" id="s-nt" type="time" data-set="nightTo" value="' + esc(st.nightTo || '06:00') + '"></div></div>' +
+    '<div class="toggle"><span class="grow"><b>Pauseskærm</b><span>Dæmpet ur, når ingen har rørt tavlen</span></span>' +
+    '<label class="sr" for="s-idle">Pauseskærm efter</label><select class="input" id="s-idle" data-set="idleMin" style="width:140px;height:44px">' +
+    [['2', 'Efter 2 min'], ['5', 'Efter 5 min'], ['10', 'Efter 10 min'], ['30', 'Efter 30 min'], ['0', 'Aldrig']].map(function (o) {
+      var cur = st.idleMin === undefined ? '5' : String(st.idleMin);
+      return '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('') + '</select></div>' +
     '<div class="toggle"><span class="grow"><b>Ny uge starter automatisk</b><span>Natten mellem søndag og mandag</span></span></div></div></div>';
 
   b += '<div class="section"><span class="label">Chauffører</span><div class="chips">';
@@ -588,7 +594,7 @@ function onChange(e) {
     return;
   }
   if (t.hasAttribute('data-set')) {
-    var u = {}; u['settings.' + t.getAttribute('data-set')] = t.value;
+    var u = {}; u['settings.' + t.getAttribute('data-set')] = t.getAttribute('data-set') === 'idleMin' ? +t.value : t.value;
     fs.update('', u).then(function () { toast('Gemt'); }).catch(fail);
   }
 }

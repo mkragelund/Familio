@@ -11,7 +11,7 @@ var store;
 var S = {
   fid: null, linkChecked: false, pairCode: '', seenAdj: null,
   user: null, family: null, famError: null, paired: true, events: [], meals: {}, completions: [], adjustments: [], packed: {},
-  view: 'uge', selDay: ymd(today()), day: ymd(today()), cele: null, wakeUntil: 0, nightShown: false
+  view: 'dag', selDay: ymd(today()), day: ymd(today()), cele: null, wakeUntil: 0, nightShown: false
 };
 var unsubs = [];
 var famUnsub = null, linkUnsub = null;
@@ -42,6 +42,8 @@ function boot() {
     });
   }).catch(showFatal);
   document.addEventListener('click', onClick);
+  document.addEventListener('touchstart', onActivity, { passive: true });
+  document.addEventListener('mousedown', onActivity);
   setInterval(tick, 20000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { tick(); requestWake(); } });
   requestWake();
@@ -61,10 +63,35 @@ function showFatal(e) {
     esc((e && e.message) || e) + '</p><button class="btn" onclick="location.reload()">Prøv igen</button></div>';
 }
 
+var wakeSentinel = null;
 function requestWake() {
   try {
-    if (navigator.wakeLock && !document.hidden) { navigator.wakeLock.request('screen').catch(function () {}); }
+    if (navigator.wakeLock && !document.hidden && !wakeSentinel) {
+      navigator.wakeLock.request('screen').then(function (w) {
+        wakeSentinel = w;
+        w.addEventListener('release', function () { wakeSentinel = null; });
+      }).catch(function () {});
+    }
   } catch (e) { /* ikke understøttet */ }
+}
+// Pauseskærm/nat: slip skærmlåsen, så iPad'ens egen Autolås kan slukke skærmen helt
+function releaseWake() {
+  try { if (wakeSentinel) { wakeSentinel.release(); wakeSentinel = null; } } catch (e) { /* */ }
+}
+
+var lastActive = Date.now();
+function idleMinutes() {
+  var v = S.family && S.family.settings && S.family.settings.idleMin;
+  return v === undefined ? 5 : +v;   // 0 = ingen pauseskærm
+}
+function isSaver() {
+  var m = idleMinutes();
+  return !!S.family && m > 0 && !isNight() && Date.now() - lastActive > m * 60000;
+}
+function onActivity() {
+  var wasDim = S.dimShown;
+  lastActive = Date.now();
+  if (wasDim) { requestWake(); render(); }
 }
 
 function watchLink() {
@@ -151,8 +178,8 @@ function tick() {
     render();
     return;
   }
-  var night = isNight();
-  if (night || night !== S.nightShown) { render(); }
+  var dim = isNight() || isSaver();
+  if (dim || dim !== S.dimShown) { render(); }
 }
 
 function isNight() {
@@ -199,7 +226,8 @@ function render() {
   html += '<div class="tb"' + (DEMO ? ' style="height:calc(100vh - 30px)"' : '') + '>';
   html += renderHead(mon);
   html += '<main class="tb-main">';
-  if (S.view === 'uge') { html += renderWeek(mon); }
+  if (S.view === 'dag') { html += renderDay(); }
+  else if (S.view === 'uge') { html += renderWeek(mon); }
   else if (S.view === 'mad') { html += renderMeals(mon); }
   else if (S.view === 'pligter') { html += renderChores(mon); }
   else { html += renderActs(mon); }
@@ -207,6 +235,10 @@ function render() {
   html += renderNav();
   html += '</div>';
   if (isNight()) { html += renderNight(); S.nightShown = true; }
+  else if (isSaver()) { html += renderSaver(); }
+  S.dimShown = isNight() || isSaver();
+  document.documentElement.classList.toggle('dark', S.dimShown);
+  if (S.dimShown) { releaseWake(); }
   app.innerHTML = html;
   renderPanel();
 }
@@ -312,6 +344,49 @@ function renderWeek(mon) {
   return h + '</div>';
 }
 
+function renderDay() {
+  var ds = S.selDay;
+  var d = parseYmd(ds);
+  var mon = mondayOf(parseYmd(S.day));
+  var h = '<div class="daytabs">';
+  weekDays(mon).forEach(function (x, i) {
+    var xs = ymd(x);
+    h += '<button class="chip" data-a="day" data-date="' + xs + '" aria-pressed="' + (xs === ds) + '">' + (xs === S.day ? 'I dag' : DAY_SHORT[i] + ' ' + x.getDate() + '.') + '</button>';
+  });
+  h += '</div><div class="dayview">';
+  // venstre: dato, aftensmad, program
+  var evs = eventsOn(S.events, ds, { tabletOnly: true });
+  h += '<div class="dv-left"><div class="dv-date"><span class="display">' + esc(DAY_NAMES[(d.getDay() + 6) % 7]) + '</span><span>' + d.getDate() + '. ' + esc(monthName(d)) + '</span></div>' +
+    '<div class="dv-meal">' + icon('food', 30, 1.8) + '<div><span class="label" style="color:var(--meal-text)">Aftensmad</span><b>' + esc(S.meals[ds] || 'Ikke planlagt') + '</b></div></div>' +
+    '<div class="label">Program</div><div class="dv-prog">';
+  if (!evs.length) { h += '<div class="none" style="font-size:16px;padding:8px 0">Ingen aktiviteter i dag</div>'; }
+  evs.forEach(function (o) {
+    var m = memberById(S.family, o.ev.who), p = pal(m), x = o.cancelled;
+    var pack = o.ev.pack || [];
+    var nP = pack.filter(function (it, j) { return S.packed[packedId(ds, o.ev.id, j)]; }).length;
+    h += '<div class="dv-ev' + (x ? ' x' : '') + '" style="' + (x ? 'background:#EFEDE8;color:var(--muted)' : 'background:' + p.tint + ';color:' + p.text) + '">' +
+      '<span class="tm">' + esc(x ? 'Aflyst' : timeLabel(o.ev)) + '</span><div class="mid"><b>' + esc(o.ev.title) + '</b><span>' + esc(m.name) + (o.driver && !x ? ' · ' + o.driver + ' kører' : '') + '</span></div>' +
+      (pack.length && !x ? '<button class="packopen" style="width:auto;color:' + p.text + '" data-a="packopen" data-date="' + ds + '" data-ev="' + esc(o.ev.id) + '">' + icon(nP === pack.length ? 'check' : 'bag', 18, 2.2) + (nP === pack.length ? 'Pakket' : 'Pak ' + nP + '/' + pack.length) + '</button>' : '') +
+      '</div>';
+  });
+  h += '</div></div>';
+  // højre: pligter pr. barn
+  h += '<div class="dv-right" style="grid-template-columns:repeat(' + Math.max(1, kids().length) + ',minmax(0,1fr))">';
+  kids().forEach(function (k) {
+    var p = pal(k);
+    var mine = chores().filter(function (c) { return (c.kids || []).indexOf(k.id) >= 0; });
+    var n = mine.filter(function (c) { return isDone(ds, c.id, k.id); }).length;
+    h += '<div class="dv-kid"><button class="dv-kidhead" data-a="kid" data-kid="' + esc(k.id) + '">' + avatar(k, 36) + '<b>' + esc(k.name.split(' ')[0]) + '</b><span style="color:' + p.text + '">' + n + '/' + mine.length + '</span></button>';
+    mine.forEach(function (c) {
+      var on = isDone(ds, c.id, k.id);
+      h += '<button class="dv-chore" style="' + (on ? 'background:' + p.color + ';color:#fff;border-color:' + p.color : 'background:#fff;color:' + p.text + ';border-color:' + p.tint) + '" data-a="chore" data-date="' + ds + '" data-chore="' + esc(c.id) + '" data-kid="' + esc(k.id) + '" aria-pressed="' + on + '">' +
+        icon(c.icon || 'star', 22, 2) + '<span class="l">' + esc(c.label) + '</span><span class="p">' + (on ? '✓' : '+' + c.pts) + '</span></button>';
+    });
+    h += '</div>';
+  });
+  return h + '</div></div>';
+}
+
 function renderMeals(mon) {
   var h = '<div class="grid7 meals7">';
   weekDays(mon).forEach(function (d, i) {
@@ -387,12 +462,28 @@ function renderActs(mon) {
 }
 
 function renderNav() {
-  var tabs = [['uge', 'calendar', 'Uge'], ['mad', 'food', 'Madplan'], ['pligter', 'star', 'Pligter'], ['akt', 'clock', 'Aktiviteter']];
+  var tabs = [['dag', 'sun', 'I dag'], ['uge', 'calendar', 'Uge'], ['mad', 'food', 'Madplan'], ['pligter', 'star', 'Pligter'], ['akt', 'clock', 'Aktiviteter']];
   var h = '<nav class="tb-nav" aria-label="Visning"><div class="inner">';
   tabs.forEach(function (t) {
     h += '<button data-a="view" data-v="' + t[0] + '" aria-pressed="' + (S.view === t[0]) + '">' + icon(t[1], 22, 2.2) + t[2] + '</button>';
   });
   return h + '</div></nav>';
+}
+
+function renderSaver() {
+  var now = new Date();
+  // flyt uret lidt hvert minut, så skærmen ikke brænder ind
+  var m = now.getMinutes();
+  var dx = ((m * 37) % 60) - 30, dy = ((m * 23) % 40) - 20;
+  var t = S.day;
+  var next = eventsOn(S.events, t, { tabletOnly: true }).filter(function (o) {
+    return !o.cancelled && (o.ev.allDay || (o.ev.to || o.ev.from || '') >= pad(now.getHours()) + ':' + pad(now.getMinutes()));
+  })[0];
+  return '<button class="saver" data-a="wake" aria-label="Tryk for at vække skærmen"><div style="transform:translate(' + dx + 'vw,' + dy + 'vh);display:flex;flex-direction:column;align-items:center;gap:10px">' +
+    '<div class="clock">' + pad(now.getHours()) + '.' + pad(now.getMinutes()) + '</div>' +
+    '<div class="sub">' + esc(DAY_NAMES[(now.getDay() + 6) % 7]) + ' ' + now.getDate() + '. ' + esc(monthName(now)) + '</div>' +
+    (next ? '<div class="sub" style="font-size:18px">Næste: ' + esc(memberById(S.family, next.ev.who).name + ' · ' + next.ev.title + ' ' + timeLabel(next.ev)) + '</div>' : '') +
+    '<div class="hintn">Tryk for at vække</div></div></button>';
 }
 
 function renderNight() {
@@ -560,7 +651,7 @@ function onClick(e) {
   var el = e.target.closest ? e.target.closest('[data-a]') : null;
   if (!el) { return; }
   var a = el.getAttribute('data-a');
-  if (a === 'view') { S.view = el.getAttribute('data-v'); render(); }
+  if (a === 'view') { S.view = el.getAttribute('data-v'); if (S.view === 'dag') { S.selDay = S.day; } render(); }
   else if (a === 'day') { S.selDay = el.getAttribute('data-date'); render(); }
   else if (a === 'goday') { S.selDay = el.getAttribute('data-date'); S.view = 'pligter'; render(); }
   else if (a === 'kid') { S.panel = { kind: 'kid', kid: el.getAttribute('data-kid') }; renderPanel(); }
@@ -579,7 +670,10 @@ function onClick(e) {
     S.cele = null; renderCele();
   }
   else if (a === 'close') { S.cele = null; renderCele(); }
-  else if (a === 'wake') { S.wakeUntil = Date.now() + 3 * 60 * 1000; render(); setTimeout(render, 3 * 60 * 1000 + 500); }
+  else if (a === 'wake') {
+    if (isNight()) { S.wakeUntil = Date.now() + 3 * 60 * 1000; setTimeout(render, 3 * 60 * 1000 + 500); }
+    lastActive = Date.now(); requestWake(); render();
+  }
   else if (a === 'tablet-google') {
     store.signInGoogle().catch(function (e) { renderTabletLogin('Login mislykkedes (' + ((e && (e.code || e.message)) || e) + ')'); });
   }

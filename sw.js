@@ -1,6 +1,6 @@
 // Familio service worker – gør appen installerbar og hurtig at starte.
 // HTML hentes altid fra nettet først (så opdateringer slår igennem), resten fra cache.
-var CACHE = 'familio-1.3.0';
+var CACHE = 'familio-1.4.0';
 var SHELL = [
   './', './index.html', './tablet.html', './css/familio.css',
   './js/config.js', './js/model.js', './js/store.js', './js/ui.js', './js/admin.js', './js/tablet.js',

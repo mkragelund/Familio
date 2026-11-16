@@ -208,6 +208,7 @@ function render() {
   html += '</div>';
   if (isNight()) { html += renderNight(); S.nightShown = true; }
   app.innerHTML = html;
+  renderPanel();
 }
 
 function renderPairing() {
@@ -230,10 +231,10 @@ function renderHead(mon) {
   var mName = MONTHS_SHORT[parseYmd(S.day).getMonth()];
   kids().forEach(function (k) {
     var p = pal(k), pt = points(k.id), g = goals(k.id);
-    h += '<div class="kidcard">' + avatar(k, 40) + '<div class="info"><span class="nm">' + esc(k.name) + '</span>' +
+    h += '<button class="kidcard" data-a="kid" data-kid="' + esc(k.id) + '" aria-label="Se hvordan det går for ' + esc(k.name) + '">' + avatar(k, 40) + '<div class="info"><span class="nm">' + esc(k.name) + '</span>' +
       '<div class="row"><span style="width:34px;color:var(--muted)">Uge</span><div class="bar"><i style="width:' + pct(pt.week, g.weekPts) + '%;background:' + p.color + '"></i></div><span style="color:' + p.text + '">' + pt.week + '/' + g.weekPts + '</span></div>' +
       '<div class="row"><span style="width:34px;color:var(--muted)">' + esc(mName.charAt(0).toUpperCase() + mName.slice(1)) + '</span><div class="bar"><i style="width:' + pct(pt.month, g.monthPts) + '%;background:' + p.color + '"></i></div><span style="color:' + p.text + '">' + pt.month + '/' + g.monthPts + '</span></div>' +
-      '</div></div>';
+      '</div></button>';
   });
   return h + '</div></header>';
 }
@@ -294,10 +295,17 @@ function renderWeek(mon) {
     if (!evs.length) { h += '<span class="none">Ingen</span>'; }
     evs.forEach(function (o) { h += actChip(o); });
     h += '</div><div class="chores"><span class="label" style="font-size:10px">Pligter</span>';
-    rows.forEach(function (r) {
-      h += '<div class="crow" style="grid-template-columns:22px repeat(' + n + ',minmax(0,1fr))"><span class="ic" title="' + esc(r.label) + '">' + icon(r.icon, 20, 2) + '</span>';
-      r.cells.forEach(function (c) { h += kidBtn(ds, c); });
-      h += '</div>';
+    kids().forEach(function (k) {
+      var p = pal(k);
+      var mine = chores().filter(function (c) { return (c.kids || []).indexOf(k.id) >= 0; });
+      var n = 0, dots = '';
+      mine.forEach(function (c) {
+        var on = isDone(ds, c.id, k.id);
+        if (on) { n++; }
+        dots += '<i style="' + (on ? 'background:' + p.color + ';border-color:' + p.color : 'border-color:' + p.color) + '"></i>';
+      });
+      h += '<button class="cstat" style="background:' + p.tint + ';color:' + p.text + '" data-a="goday" data-date="' + ds + '" aria-label="' + esc(k.name + ', ' + DAY_NAMES[i] + ': ' + n + ' af ' + mine.length + ' pligter klaret') + '">' +
+        '<span class="cs-top"><b>' + esc(k.short) + '</b><span>' + n + '/' + mine.length + '</span></span><span class="dots">' + dots + '</span></button>';
     });
     h += '</div></section>';
   });
@@ -348,7 +356,7 @@ function renderActs(mon) {
     h += '<span style="background:' + p.tint + ';color:' + p.text + '">' + esc(m.name) + '</span>';
   });
   // Dage med aktiviteter får dobbelt bredde, så huskelisterne kan læses
-  var cols = weekDays(mon).map(function (d) { return eventsOn(S.events, ymd(d), { tabletOnly: true }).length ? '2fr' : '1fr'; });
+  var cols = weekDays(mon).map(function (d) { return eventsOn(S.events, ymd(d), { tabletOnly: true }).length ? '1.6fr' : '1fr'; });
   h += '</div><div class="grid7" style="height:auto;flex:1;min-height:0;grid-template-columns:' + cols.map(function (c) { return 'minmax(0,' + c + ')'; }).join(' ') + '">';
   weekDays(mon).forEach(function (d, i) {
     var ds = ymd(d);
@@ -367,13 +375,9 @@ function renderActs(mon) {
         '<span class="t">' + esc(o.ev.title) + '</span><span class="w">' + esc(m.name) + '</span>';
       if (o.driver && !x) { h += '<span class="drv">' + icon('car', 16, 2.2) + 'Kører: ' + esc(o.driver) + '</span>'; }
       if (pack.length && !x) {
-        h += '<div class="pack"><span class="label" style="color:inherit;font-size:10px">Husk at pakke</span>';
-        pack.forEach(function (it, j) {
-          var on = !!S.packed[packedId(ds, o.ev.id, j)];
-          h += '<button class="packbtn' + (on ? ' on' : '') + '" style="background:' + (on ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.55)') + ';color:' + p.text + '" data-a="pack" data-date="' + ds +
-            '" data-ev="' + esc(o.ev.id) + '" data-idx="' + j + '" aria-pressed="' + on + '"><span class="box" style="border-color:' + p.color + ';background:' + (on ? p.color : '#fff') + '">' + (on ? '✓' : '') + '</span><span class="lbl">' + esc(it) + '</span></button>';
-        });
-        h += '</div>';
+        var nP = pack.filter(function (it, j) { return S.packed[packedId(ds, o.ev.id, j)]; }).length;
+        h += '<button class="packopen" style="color:' + p.text + '" data-a="packopen" data-date="' + ds + '" data-ev="' + esc(o.ev.id) + '">' +
+          icon(allPacked ? 'check' : 'bag', 18, 2.2) + '<span>' + (allPacked ? 'Pakket' : 'Pak ' + nP + '/' + pack.length) + '</span></button>';
       }
       h += '</div>';
     });
@@ -421,6 +425,72 @@ function renderCele() {
     '<div class="sub">' + esc(c.task) + ' · ' + c.week + ' p denne uge · ' + c.month + ' p i ' + esc(monthName(parseYmd(S.day))) + '</div>' +
     '<div class="btns"' + (c.bonus ? ' style="grid-template-columns:1fr"' : '') + '>' + (c.bonus ? '' : '<button class="btn secondary" data-a="undo">' + icon('undo', 20, 2.4) + 'Fortryd</button>') +
     '<button class="btn" style="background:' + p.color + '" data-a="close">' + (c.bonus ? 'Tak!' : 'Super!') + '</button></div></div></div>';
+}
+
+// ---------- Paneler (barnets overblik, huskeliste) ----------
+var panelEl = document.createElement('div');
+document.body.appendChild(panelEl);
+
+function renderPanel() {
+  var pn = S.panel;
+  if (!pn || !S.family) { panelEl.innerHTML = ''; return; }
+  panelEl.innerHTML = '<div class="overlay" data-a="panel-bg">' + (pn.kind === 'kid' ? kidPanel(pn.kid) : packPanel(pn.date, pn.ev)) + '</div>';
+}
+
+function kidPanel(kidId) {
+  var k = memberById(S.family, kidId), p = pal(k), g = goals(kidId), pt = points(kidId);
+  var t = parseYmd(S.day), mon = mondayOf(t);
+  function goalCard(title, val, goal, reward) {
+    var left = Math.max(0, goal - val);
+    return '<div class="gcard" style="background:' + p.tint + ';color:' + p.text + '"><span class="label" style="color:inherit">' + esc(title) + '</span>' +
+      '<div><b class="big">' + val + '</b><span class="of"> / ' + goal + ' point</span></div>' +
+      '<div class="bar big"><i style="width:' + pct(val, goal) + '%;background:' + p.color + '"></i></div>' +
+      '<span class="st">' + (goal && left === 0 ? icon('trophy', 18, 2.2) + ' Mål nået!' : 'Mangler ' + left + ' point') + '</span>' +
+      (reward ? '<span class="rw">Belønning: ' + esc(reward) + '</span>' : '') + '</div>';
+  }
+  var h = '<div class="panel-card" role="dialog" aria-modal="true" aria-label="' + esc(k.name) + '">' +
+    '<div class="panel-top">' + avatar(k, 64) + '<b class="display" style="font-size:30px;flex:1">' + esc(k.name) + '</b>' +
+    '<button class="btn secondary" data-a="panel-close">Luk</button></div>' +
+    '<div class="gcards">' + goalCard('Denne uge', pt.week, g.weekPts, g.weekReward) + goalCard(monthName(t).charAt(0).toUpperCase() + monthName(t).slice(1), pt.month, g.monthPts, g.monthReward) + '</div>';
+  // point pr. dag
+  var days = weekDays(mon).map(function (d) { var ds = ymd(d); return { d: d, ds: ds, v: sumPoints(S.completions, S.adjustments, kidId, ds, ds) }; });
+  var max = Math.max(30, Math.max.apply(null, days.map(function (x) { return x.v; })));
+  h += '<div class="label">Point pr. dag i denne uge</div><div class="daybars">';
+  days.forEach(function (x, i) {
+    var future = x.ds > S.day;
+    h += '<div class="db' + (x.ds === S.day ? ' today' : '') + '"><span class="v">' + (future ? '' : x.v) + '</span><div class="col"><i style="height:' + Math.round(x.v / max * 100) + '%;background:' + p.color + '"></i></div><span class="d">' + DAY_SHORT[i] + '</span></div>';
+  });
+  h += '</div>';
+  // daglige opgaver (pligter kun for dette barn)
+  var daily = chores().filter(function (c) { return (c.kids || []).length === 1 && c.kids[0] === kidId; });
+  var passed = days.filter(function (x) { return x.ds <= S.day; });
+  if (daily.length) {
+    h += '<div class="label">Daglige opgaver i denne uge</div><div class="dailies">';
+    daily.forEach(function (c) {
+      var n = passed.filter(function (x) { return isDone(x.ds, c.id, kidId); }).length;
+      h += '<div class="daily">' + icon(c.icon || 'star', 22, 2) + '<b>' + esc(c.label) + '</b><span>' + n + ' af ' + passed.length + ' dage</span><span class="ticks">';
+      days.forEach(function (x) { h += '<i class="' + (x.ds > S.day ? 'f' : isDone(x.ds, c.id, kidId) ? 'y' : 'n') + '" style="' + (isDone(x.ds, c.id, kidId) ? 'background:' + p.color : '') + '"></i>'; });
+      h += '</span></div>';
+    });
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+
+function packPanel(ds, evId) {
+  var ev = S.events.filter(function (e) { return e.id === evId; })[0];
+  if (!ev) { return ''; }
+  var m = memberById(S.family, ev.who), p = pal(m);
+  var h = '<div class="panel-card" role="dialog" aria-modal="true" aria-label="Huskeliste" style="width:560px">' +
+    '<div class="panel-top"><div style="flex:1"><b class="display" style="font-size:28px">Husk at pakke</b><div class="muted" style="font-weight:700">' +
+    esc(ev.title + ' · ' + m.name + ' · ' + DAY_NAMES[(parseYmd(ds).getDay() + 6) % 7].toLowerCase() + ' ' + timeLabel(ev)) + '</div></div>' +
+    '<button class="btn secondary" data-a="panel-close">Luk</button></div><div class="packlist">';
+  (ev.pack || []).forEach(function (it, j) {
+    var on = !!S.packed[packedId(ds, ev.id, j)];
+    h += '<button class="packbig' + (on ? ' on' : '') + '" style="background:' + (on ? p.tint : '#fff') + ';color:' + p.text + '" data-a="pack" data-date="' + ds + '" data-ev="' + esc(ev.id) + '" data-idx="' + j + '" aria-pressed="' + on + '">' +
+      '<span class="box" style="border-color:' + p.color + ';background:' + (on ? p.color : '#fff') + '">' + (on ? '✓' : '') + '</span><span class="lbl">' + esc(it) + '</span></button>';
+  });
+  return h + '</div></div>';
 }
 
 // Ny bonus fra en forælder → fejring på tavlen
@@ -492,6 +562,11 @@ function onClick(e) {
   var a = el.getAttribute('data-a');
   if (a === 'view') { S.view = el.getAttribute('data-v'); render(); }
   else if (a === 'day') { S.selDay = el.getAttribute('data-date'); render(); }
+  else if (a === 'goday') { S.selDay = el.getAttribute('data-date'); S.view = 'pligter'; render(); }
+  else if (a === 'kid') { S.panel = { kind: 'kid', kid: el.getAttribute('data-kid') }; renderPanel(); }
+  else if (a === 'packopen') { S.panel = { kind: 'pack', date: el.getAttribute('data-date'), ev: el.getAttribute('data-ev') }; renderPanel(); }
+  else if (a === 'panel-close') { S.panel = null; renderPanel(); }
+  else if (a === 'panel-bg') { if (e.target === el) { S.panel = null; renderPanel(); } }
   else if (a === 'chore') { toggleChore(el.getAttribute('data-date'), el.getAttribute('data-chore'), el.getAttribute('data-kid')); }
   else if (a === 'pack') {
     var date = el.getAttribute('data-date');

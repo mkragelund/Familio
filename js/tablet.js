@@ -98,7 +98,12 @@ function onActivity() {
   unlockAudio();
   var wasDim = S.dimShown;
   lastActive = Date.now();
-  if (wasDim) { requestWake(); render(); }
+  if (wasDim) {
+    // Væk skærmen – men tegn først om lidt efter, så iPad'en ikke mister trykket
+    if (isNight()) { S.wakeUntil = Date.now() + 3 * 60 * 1000; setTimeout(render, 3 * 60 * 1000 + 500); }
+    requestWake();
+    setTimeout(render, 350);
+  }
 }
 
 function watchLink() {
@@ -687,7 +692,7 @@ function onClick(e) {
   else if (a === 'close') { S.cele = null; renderCele(); }
   else if (a === 'wake') {
     if (isNight()) { S.wakeUntil = Date.now() + 3 * 60 * 1000; setTimeout(render, 3 * 60 * 1000 + 500); }
-    lastActive = Date.now(); requestWake(); render();
+    lastActive = Date.now(); requestWake(); setTimeout(render, 0);
   }
   else if (a === 'tablet-google') {
     store.signInGoogle().catch(function (e) { renderTabletLogin('Login mislykkedes (' + ((e && (e.code || e.message)) || e) + ')'); });

@@ -56,6 +56,14 @@ export function occursOn(ev, dateStr) {
   if (ev.freq === 'm1') {
     return parseYmd(ev.start).getDate() === d.getDate();
   }
+  if (ev.freq === 'mw') {
+    // fx "1. søndag i måneden" (nth 1–4) eller "sidste søndag" (nth -1)
+    var wd = (ev.days || [])[0];
+    if (!wd || dow(d) !== wd) { return false; }
+    var nth = +ev.nth || 1;
+    if (nth === -1) { return addDays(d, 7).getMonth() !== d.getMonth(); }
+    return Math.ceil(d.getDate() / 7) === nth;
+  }
   var days = ev.days || [];
   if (days.indexOf(dow(d)) < 0) { return false; }
   if (ev.freq === 'w2') {
@@ -99,9 +107,13 @@ export function recurrenceLabel(ev) {
   }
   var f = ev.freq === 'w2' ? 'Hver 2. uge' : ev.freq === 'm1' ? 'Hver måned' : 'Hver uge';
   if (ev.freq === 'm1') { return f + ' d. ' + parseYmd(ev.start).getDate() + '.'; }
+  if (ev.freq === 'mw') { return nthLabel(ev.nth) + ' ' + DAY_NAMES[((ev.days || [7])[0]) - 1].toLowerCase() + ' i hver måned'; }
   var names = (ev.days || []).slice().sort().map(function (n) { return DAY_NAMES[n - 1].toLowerCase(); });
   return f + (names.length ? ' · ' + names.join(', ') : '');
 }
+
+export function nthLabel(n) { n = +n || 1; return n === -1 ? 'Sidste' : n + '.'; }
+export function nthOf(d) { return Math.ceil(d.getDate() / 7); }
 
 // Point
 export function sumPoints(completions, adjustments, kid, from, to) {

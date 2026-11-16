@@ -4,7 +4,7 @@ import { APP_VERSION } from './config.js';
 import {
   ymd, parseYmd, today, addDays, mondayOf, weekDays, isoWeek, weekRangeLabel, DAY_NAMES, DAY_2,
   eventsOn, timeLabel, recurrenceLabel, sumPoints, periodBounds, memberById, kidsOf, shortDate, longDate,
-  monthName, seedFamily, newId, dow, familyIdNew, randomCode, formatCode, cleanCode, adultMember, KID_COLORS, initials
+  monthName, seedFamily, newId, dow, nthOf, nthLabel, familyIdNew, randomCode, formatCode, cleanCode, adultMember, KID_COLORS, initials
 } from './model.js';
 import { esc, pal, icon, logo, avatar, toast } from './ui.js';
 
@@ -408,7 +408,7 @@ function blankForm(date) {
   var d = date || ymd(today());
   return {
     id: '', title: '', who: (kidsOf(S.family)[0] || {}).id || 'fam', type: 'once', date: d, endDate: '',
-    days: [dow(parseYmd(d))], freq: 'w1', start: d, end: '', allDay: false, from: '15:00', to: '16:00',
+    days: [dow(parseYmd(d))], freq: 'w1', nth: Math.min(4, nthOf(parseYmd(d))), start: d, end: '', allDay: false, from: '15:00', to: '16:00',
     driver: '', pack: '', showOnTablet: true, err: ''
   };
 }
@@ -416,7 +416,7 @@ function blankForm(date) {
 function formFromEvent(ev) {
   return {
     id: ev.id, title: ev.title || '', who: ev.who || 'fam', type: ev.type || 'once', date: ev.date || ev.start || ymd(today()), endDate: ev.endDate || '',
-    days: (ev.days || []).slice(), freq: ev.freq || 'w1', start: ev.start || ev.date || ymd(today()), end: ev.end || '', allDay: !!ev.allDay,
+    days: (ev.days || []).slice(), freq: ev.freq || 'w1', nth: +ev.nth || 1, start: ev.start || ev.date || ymd(today()), end: ev.end || '', allDay: !!ev.allDay,
     from: ev.from || '', to: ev.to || '', driver: ev.driver || '', pack: (ev.pack || []).join(', '), showOnTablet: ev.showOnTablet !== false, err: ''
   };
 }
@@ -433,8 +433,17 @@ function renderEventForm() {
       '<div class="field"><label for="f-endDate">Slutdato (valgfri)</label><input class="input" id="f-endDate" type="date" data-f="endDate" value="' + esc(f.endDate) + '"></div></div>' +
       '<span class="hint">Brug slutdato til fx rejser over flere dage.</span>';
   } else {
-    b += '<div class="field"><span class="label">Hvor ofte</span><div class="chips">' + chipsHtml([['w1', 'Hver uge'], ['w2', 'Hver 2. uge'], ['m1', 'Hver måned']], 'f-freq', f.freq) + '</div></div>';
-    if (f.freq !== 'm1') {
+    b += '<div class="field"><span class="label">Hvor ofte</span><div class="chips">' +
+      chipsHtml([['w1', 'Hver uge'], ['w2', 'Hver 2. uge'], ['mw', 'Månedlig ugedag'], ['m1', 'Samme dato hver måned']], 'f-freq', f.freq) + '</div></div>';
+    if (f.freq === 'mw') {
+      b += '<div class="field"><span class="label">Hvilken i måneden</span><div class="chips">' +
+        chipsHtml([['1', '1.'], ['2', '2.'], ['3', '3.'], ['4', '4.'], ['-1', 'Sidste']], 'f-nth', String(f.nth)) + '</div></div>';
+      b += '<div class="field"><span class="label">Ugedag</span><div class="days7">';
+      DAY_2.forEach(function (n, i) {
+        b += '<button class="chip" data-a="f-day1" data-v="' + (i + 1) + '" aria-pressed="' + (f.days[0] === i + 1) + '" aria-label="' + DAY_NAMES[i] + '">' + n + '</button>';
+      });
+      b += '</div><span class="hint" style="font-weight:800;color:var(--ink)">' + esc(nthLabel(f.nth) + ' ' + DAY_NAMES[(f.days[0] || 7) - 1].toLowerCase() + ' i hver måned') + '</span></div>';
+    } else if (f.freq !== 'm1') {
       b += '<div class="field"><span class="label">Ugedag(e)</span><div class="days7">';
       DAY_2.forEach(function (n, i) {
         b += '<button class="chip" data-a="f-day" data-v="' + (i + 1) + '" aria-pressed="' + (f.days.indexOf(i + 1) >= 0) + '" aria-label="' + DAY_NAMES[i] + '">' + n + '</button>';
@@ -443,7 +452,7 @@ function renderEventForm() {
     }
     b += '<div class="row2"><div class="field"><label for="f-start">Starter</label><input class="input" id="f-start" type="date" data-f="start" value="' + esc(f.start) + '"></div>' +
       '<div class="field"><label for="f-end">Slutter (valgfri)</label><input class="input" id="f-end" type="date" data-f="end" value="' + esc(f.end) + '"></div></div>' +
-      '<span class="hint">' + (f.freq === 'm1' ? 'Gentages samme dato hver måned som startdatoen. ' : '') + 'Tom slutdato = fortsætter, til I sletter den. En enkelt gang kan aflyses fra ugeoversigten.</span>';
+      '<span class="hint">' + (f.freq === 'm1' ? 'Gentages samme dato hver måned som startdatoen. ' : '') + (f.freq === 'mw' ? 'Første gang er den første ' + DAY_NAMES[(f.days[0] || 7) - 1].toLowerCase() + ' efter startdatoen, der passer. ' : '') + 'Tom slutdato = fortsætter, til I sletter den. En enkelt gang kan aflyses fra ugeoversigten.</span>';
   }
   if (!f.allDay) {
     b += '<div class="row2"><div class="field"><label for="f-from">Fra</label><input class="input" id="f-from" type="time" data-f="from" value="' + esc(f.from) + '"></div>' +
@@ -647,7 +656,16 @@ function onClick(e) {
     case 'open-ev': S.sheet = { kind: 'ev', id: el.getAttribute('data-id'), date: el.getAttribute('data-date') }; render(); break;
     case 'f-who': f.who = v; render(); break;
     case 'f-type': f.type = v; render(); break;
-    case 'f-freq': f.freq = v; render(); break;
+    case 'f-freq':
+      f.freq = v;
+      if (v === 'mw') {
+        var sd = parseYmd(f.start || ymd(today()));
+        f.days = [f.days.length === 1 ? f.days[0] : dow(sd)];
+        if (!f.nth) { f.nth = Math.min(4, nthOf(sd)); }
+      }
+      render(); break;
+    case 'f-nth': f.nth = +v; render(); break;
+    case 'f-day1': f.days = [+v]; render(); break;
     case 'f-driver': f.driver = v; render(); break;
     case 'f-day':
       var n = +v, i = f.days.indexOf(n);
@@ -787,7 +805,10 @@ function saveEvent() {
     showOnTablet: !!f.showOnTablet, exceptions: (old && old.exceptions) || {}
   };
   if (f.type === 'once') { ev.date = f.date; ev.endDate = f.endDate && f.endDate > f.date ? f.endDate : ''; }
-  else { ev.days = f.days.slice().sort(); ev.freq = f.freq; ev.start = f.start; ev.end = f.end || ''; }
+  else {
+    ev.days = f.freq === 'mw' ? [f.days[0]] : f.days.slice().sort(); ev.freq = f.freq; ev.start = f.start; ev.end = f.end || '';
+    if (f.freq === 'mw') { ev.nth = +f.nth || 1; }
+  }
   var id = f.id || newId();
   fs.set('events/' + id, ev).then(function () {
     toast(f.id ? 'Ændringer gemt' : 'Aktiviteten er gemt');

@@ -1,14 +1,40 @@
 {
   "firestore": [
-    { "database": "familio", "rules": "firestore.rules" }
+    {
+      "database": "familio",
+      "rules": "firestore.rules"
+    }
   ],
   "hosting": {
-    "site": "familio",
     "public": ".",
-    "ignore": ["firebase.json", "firestore.rules", "README.md", "**/.*", "**/node_modules/**", "icons/icon.svg"],
+    "ignore": [
+      "firebase.json",
+      "firestore.rules",
+      "README.md",
+      "**/.*",
+      "**/node_modules/**",
+      "icons/icon.svg"
+    ],
     "headers": [
-      { "source": "sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
-      { "source": "**/*.@(html|js|css|webmanifest)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
-    ]
+      {
+        "source": "sw.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(html|js|css|webmanifest)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
+    ],
+    "target": "familio"
   }
 }

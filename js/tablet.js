@@ -5,7 +5,8 @@ import {
   eventsOn, timeLabel, sumPoints, periodBounds, completionId, packedId, memberById, kidsOf, inNight,
   shortDate, monthName, MONTHS_SHORT, pad, randomCode
 } from './model.js';
-import { esc, pal, icon, logo, avatar, confettiHtml, pick } from './ui.js';
+import { esc, pal, icon, logo, avatar, confettiHtml, pick, autoUpdate, justUpdated, toast } from './ui.js';
+import { APP_VERSION } from './config.js';
 
 var store;
 var S = {
@@ -47,6 +48,9 @@ function boot() {
   setInterval(tick, 20000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { tick(); requestWake(); } });
   requestWake();
+  // Tavlen står altid åben: hent ny version af sig selv, når ingen bruger den (pauseskærm/nat) eller efter 2 min uden tryk
+  autoUpdate(APP_VERSION, function () { return !S.cele && !S.panel && (S.dimShown || Date.now() - lastActive > 120000); });
+  if (justUpdated()) { setTimeout(function () { toast('Familio er opdateret til version ' + APP_VERSION); }, 1500); }
 }
 
 function renderTabletLogin(err) {
@@ -257,7 +261,7 @@ function renderPairing() {
 
 function renderHead(mon) {
   var h = '<header class="tb-head"><div class="tb-brand">' + logo(52) + '<div>' +
-    '<div class="name"><b>Familio</b><span>· ' + esc((S.family.name || '').toUpperCase()) + '</span></div>' +
+    '<div class="name"><b>Familio</b><span>· ' + esc((S.family.name || '').toUpperCase()) + '</span><em class="ver">v' + esc(APP_VERSION) + '</em></div>' +
     '<div class="tb-week"><span class="w">Uge ' + isoWeek(mon) + '</span><span class="r">' + esc(weekRangeLabel(mon)) + '</span></div>' +
     '</div></div><div class="tb-kids">';
   var mName = MONTHS_SHORT[parseYmd(S.day).getMonth()];

@@ -23,6 +23,7 @@ self.addEventListener('fetch', function (e) {
   if (req.method !== 'GET') { return; }
   var url = new URL(req.url);
   if (url.origin !== location.origin) { return; } // Firebase og skrifttyper håndteres af browseren
+  if (/version\.json$/.test(url.pathname)) { return; } // altid fra nettet
   var isPage = req.mode === 'navigate' || /\.(html|js|css)$/.test(url.pathname);
   if (isPage) {
     // netværk først, cache som reserve (offline)

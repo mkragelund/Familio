@@ -6,7 +6,7 @@ import {
   eventsOn, timeLabel, recurrenceLabel, sumPoints, periodBounds, memberById, kidsOf, shortDate, longDate,
   monthName, seedFamily, newId, dow, nthOf, nthLabel, familyIdNew, randomCode, formatCode, cleanCode, adultMember, KID_COLORS, initials
 } from './model.js';
-import { esc, pal, icon, logo, avatar, toast } from './ui.js';
+import { esc, pal, icon, logo, avatar, toast, autoUpdate, justUpdated } from './ui.js';
 
 var store;
 var S = {
@@ -48,6 +48,9 @@ function boot() {
   document.addEventListener('input', onInput);
   document.addEventListener('change', onChange);
   document.addEventListener('submit', onSubmit);
+  // Ny version: genindlæs, når man ikke er i gang med at skrive eller har et vindue åbent
+  autoUpdate(APP_VERSION, function () { return !editing() && !S.sheet && !S.busy; });
+  if (justUpdated()) { setTimeout(function () { toast('Familio er opdateret til version ' + APP_VERSION); }, 1200); }
   document.addEventListener('focusout', function () { setTimeout(function () { if (pendingRender && !editing()) { render(); } }, 0); });
 }
 
@@ -209,7 +212,7 @@ function renderNoFamily() {
 }
 
 function renderTop(title, sub, withWeek) {
-  var h = '<div class="ad-top"><div class="ad-title"><div class="t"><b>' + esc(title) + '</b><span>' + esc(sub) + '</span></div>' +
+  var h = '<div class="ad-top"><div class="ad-title"><div class="t"><b>' + esc(title) + '</b><span>' + esc(sub) + ' <em class="ver">v' + esc(APP_VERSION) + '</em></span></div>' +
     '<button class="roundbtn" data-a="settings" aria-label="Indstillinger">' + icon('gear', 22, 2) + '</button></div>';
   if (withWeek) {
     var isNow = ymd(S.weekMon) === ymd(mondayOf(today()));

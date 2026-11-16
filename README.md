@@ -41,6 +41,11 @@ python3 -m http.server 8000
 - Standardmål pr. barn: 120 point om ugen og 450 om måneden (månedsbelønning 100 kr. i lommepenge). Rettes pr. barn under Pligter & point.
 - Forældre kan give bonus (5/10/20 point med en grund) – den fejres på tavlen. "Træk 5 point fra" er kun til at rette fejl.
 
+## Ny version
+
+Ret versionsnummeret tre steder: `js/config.js` (APP_VERSION), `version.json` og `sw.js` (CACHE).
+Telefoner og tavle tjekker `version.json` og genindlæser selv (tavlen når den ikke er i brug).
+
 ## Udgivelse
 
 ```

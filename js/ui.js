@@ -93,3 +93,33 @@ export function toast(msg) {
   setTimeout(function () { t.classList.add('out'); }, 2200);
   setTimeout(function () { if (t.parentNode) { t.parentNode.removeChild(t); } }, 2700);
 }
+
+// Automatisk opdatering: spørg serveren om nyeste version (version.json) og genindlæs, hvis der er en ny.
+// shouldReloadNow() afgør, om det er et godt tidspunkt (fx ikke midt i en fejring).
+export function autoUpdate(current, shouldReloadNow, everyMs) {
+  var pending = false;
+  function check() {
+    if (!navigator.onLine && navigator.onLine !== undefined) { return; }
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (j && j.version && j.version !== current) { pending = true; tryReload(); }
+    }).catch(function () {});
+  }
+  function tryReload() {
+    if (!pending) { return; }
+    var last = 0;
+    try { last = +localStorage.getItem('familio-reload-at') || 0; } catch (e) { /* */ }
+    if (Date.now() - last < 60 * 60 * 1000) { return; } // højst én automatisk genindlæsning i timen
+    if (!shouldReloadNow || shouldReloadNow()) {
+      try { sessionStorage.setItem('familio-updated', '1'); localStorage.setItem('familio-reload-at', String(Date.now())); } catch (e) { /* */ }
+      location.reload();
+    }
+  }
+  setInterval(check, everyMs || 15 * 60 * 1000);
+  setInterval(tryReload, 30 * 1000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { check(); } });
+  setTimeout(check, 5000);
+}
+
+export function justUpdated() {
+  try { var v = sessionStorage.getItem('familio-updated'); sessionStorage.removeItem('familio-updated'); return !!v; } catch (e) { return false; }
+}

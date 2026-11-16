@@ -327,3 +327,5 @@ html.dark, html.dark body { background: #0B0D12; }
 .dv-chore .p { font-size: 14px; }
 .tb-nav .inner { grid-template-columns: repeat(5, minmax(0, 1fr)); width: 820px; }
 .tb-nav button { font-size: 15px; gap: 6px; }
+
+.ver { font-style: normal; font-size: 11px; font-weight: 700; color: #9AA0AE; letter-spacing: 0; margin-left: 6px; }

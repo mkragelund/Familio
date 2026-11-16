@@ -3,17 +3,20 @@ import { createStore, DEMO } from './store.js';
 import {
   ymd, parseYmd, today, addDays, mondayOf, weekDays, isoWeek, weekRangeLabel, DAY_NAMES, DAY_SHORT,
   eventsOn, timeLabel, sumPoints, periodBounds, completionId, packedId, memberById, kidsOf, inNight,
-  shortDate, monthName, MONTHS_SHORT, pad
+  shortDate, monthName, MONTHS_SHORT, pad, randomCode
 } from './model.js';
 import { esc, pal, icon, logo, avatar, confettiHtml, pick } from './ui.js';
 
 var store;
 var S = {
+  fid: null, linkChecked: false, pairCode: '', seenAdj: null,
   user: null, family: null, famError: null, paired: true, events: [], meals: {}, completions: [], adjustments: [], packed: {},
   view: 'uge', selDay: ymd(today()), day: ymd(today()), cele: null, wakeUntil: 0, nightShown: false
 };
 var unsubs = [];
-var famUnsub = null;
+var famUnsub = null, linkUnsub = null;
+function F(p) { return 'families/' + S.fid + (p ? '/' + p : ''); }
+var PAIR_KEY = 'familio-pair-code';
 var app = document.getElementById('app');
 var overlay = document.getElementById('overlay');
 
@@ -31,7 +34,7 @@ function boot() {
     store.onUser(function (u) {
       if (!u) { store.signInAnon().catch(showFatal); return; }
       S.user = u;
-      watchFamily();
+      watchLink();
     });
   }).catch(showFatal);
   document.addEventListener('click', onClick);
@@ -51,48 +54,77 @@ function requestWake() {
   } catch (e) { /* ikke understøttet */ }
 }
 
-function watchFamily() {
-  if (famUnsub) { famUnsub(); }
-  famUnsub = store.watchDoc('', function (fam) {
-    var first = !S.family;
-    S.family = fam; S.paired = true; S.famError = null;
-    if (fam && first) { subscribeData(); }
-    render();
-  }, function (err) {
-    S.family = null;
-    if (err && (err.code === 'permission-denied' || /permission/i.test(err.message || ''))) {
-      S.paired = false;
+function watchLink() {
+  if (linkUnsub) { linkUnsub(); }
+  // En forælder, der allerede er logget ind på enheden, ser bare sin egen familie
+  var path = S.user.anon ? 'tabletLinks/' + S.user.uid : 'users/' + S.user.uid;
+  linkUnsub = store.watchDoc(path, function (link) {
+    S.linkChecked = true;
+    var fid = link && link.familyId;
+    if (fid && fid !== S.fid) {
+      S.fid = fid; S.family = null; S.paired = true; S.pairRequested = false;
+      watchFamily();
+    } else if (!fid) {
+      S.fid = null; S.family = null; S.paired = false;
+      stopData();
       requestPairing();
-      setTimeout(watchFamily, 15000);
-    } else {
-      S.famError = err;
     }
+    render();
+  }, function () { S.linkChecked = true; S.paired = false; requestPairing(); render(); });
+}
+
+function stopData() {
+  unsubs.forEach(function (u) { u(); }); unsubs = [];
+  if (famUnsub) { famUnsub(); famUnsub = null; }
+}
+
+function watchFamily() {
+  stopData();
+  famUnsub = store.watchDoc(F(''), function (fam) {
+    var first = !S.family;
+    S.family = fam; S.paired = !!fam; S.famError = null;
+    if (fam && first) { subscribeData(); }
+    if (!fam) { requestPairing(); }
+    render();
+  }, function () {
+    // Tabletten er fjernet fra familien
+    S.family = null; S.paired = false; S.fid = null;
+    stopData();
+    requestPairing();
     render();
   });
 }
 
-function pairCode() { return (S.user && S.user.uid ? S.user.uid : '').slice(0, 6).toUpperCase(); }
-
 function requestPairing() {
-  if (!S.user) { return; }
-  store.set('pairing/' + S.user.uid, { code: pairCode(), at: Date.now(), device: (navigator.userAgent || '').slice(0, 120) }).catch(function () {});
+  if (!S.user || S.pairRequested) { return; }
+  S.pairRequested = true;
+  var code = '';
+  try { code = localStorage.getItem(PAIR_KEY) || ''; } catch (e) { /* */ }
+  if (!code) { code = randomCode(6); try { localStorage.setItem(PAIR_KEY, code); } catch (e) { /* */ } }
+  S.pairCode = code;
+  store.set('pairing/' + code, { uid: S.user.uid, at: Date.now(), device: (navigator.userAgent || '').slice(0, 120) }).catch(function () {
+    // koden er taget af en anden enhed – lav en ny
+    try { localStorage.removeItem(PAIR_KEY); } catch (e) { /* */ }
+    S.pairCode = ''; S.pairRequested = false; setTimeout(requestPairing, 500);
+  });
 }
 
 function subscribeData() {
   unsubs.forEach(function (u) { u(); });
   unsubs = [];
+  S.seenAdj = null;
   var t = parseYmd(S.day);
   var b = periodBounds(t);
   var from = b.weekFrom < b.monthFrom ? b.weekFrom : b.monthFrom;
   var mon = mondayOf(t);
-  unsubs.push(store.watchColl('events', null, function (list) { S.events = list; render(); }));
+  unsubs.push(store.watchColl(F('events'), null, function (list) { S.events = list; render(); }));
   // Måltider gemmes med datoen som id og som felt "date"
-  unsubs.push(store.watchColl('meals', ['date', '>=', ymd(mon)], function (list) {
+  unsubs.push(store.watchColl(F('meals'), ['date', '>=', ymd(mon)], function (list) {
     var m = {}; list.forEach(function (x) { m[x.id] = x.text || ''; }); S.meals = m; render();
   }));
-  unsubs.push(store.watchColl('completions', ['date', '>=', from], function (list) { S.completions = list; render(); }));
-  unsubs.push(store.watchColl('adjustments', ['date', '>=', from], function (list) { S.adjustments = list; render(); }));
-  unsubs.push(store.watchColl('packed', ['date', '>=', ymd(mon)], function (list) {
+  unsubs.push(store.watchColl(F('completions'), ['date', '>=', from], function (list) { S.completions = list; render(); }));
+  unsubs.push(store.watchColl(F('adjustments'), ['date', '>=', from], function (list) { S.adjustments = list; checkBonus(list); render(); }));
+  unsubs.push(store.watchColl(F('packed'), ['date', '>=', ymd(mon)], function (list) {
     var p = {}; list.forEach(function (x) { p[x.id] = true; }); S.packed = p; render();
   }));
 }
@@ -140,11 +172,12 @@ function pct(a, b) { return b > 0 ? Math.min(100, Math.round(a / b * 100)) : 0; 
 function render() {
   S.nightShown = false;
   if (!S.user) { return; }
+  if (!S.linkChecked) { return; }
   if (!S.paired) { app.innerHTML = renderPairing(); return; }
   if (S.famError) { showFatal(S.famError); return; }
   if (!S.family) {
     app.innerHTML = '<div class="center-screen">' + logo(72) + '<b class="display" style="font-size:24px">Venter på familien…</b>' +
-      '<p class="muted">Log ind i forældre-appen og opret familien først.</p></div>';
+      '<p class="muted">Henter familien…</p></div>';
     return;
   }
   var mon = mondayOf(parseYmd(S.day));
@@ -167,8 +200,8 @@ function render() {
 function renderPairing() {
   return '<div class="center-screen">' + logo(88) +
     '<b class="display" style="font-size:30px">Tilknyt denne tablet</b>' +
-    '<p class="muted" style="font-size:18px;max-width:520px">Åbn Familio på din telefon › Indstillinger › Tablets, og godkend koden herunder.</p>' +
-    '<div class="display" style="font-size:64px;letter-spacing:.15em;background:#fff;border-radius:20px;padding:14px 28px">' + esc(pairCode()) + '</div>' +
+    '<p class="muted" style="font-size:18px;max-width:560px">Åbn Familio på din telefon › Indstillinger › Tablets › <b>Tilknyt tablet</b>, og skriv koden herunder.</p>' +
+    '<div class="display" style="font-size:64px;letter-spacing:.15em;background:#fff;border-radius:20px;padding:14px 28px">' + esc(S.pairCode || '······') + '</div>' +
     '<p class="muted">Siden opdaterer automatisk, når den er godkendt.</p></div>';
 }
 
@@ -369,8 +402,28 @@ function renderCele() {
     '<div class="h" style="color:' + p.text + '">' + esc(c.head) + '</div><div class="b">' + esc(c.body) + '</div>' +
     (c.reward ? '<div class="reward">' + icon('trophy', 24, 2) + esc(c.reward) + '</div>' : '') +
     '<div class="sub">' + esc(c.task) + ' · ' + c.week + ' p denne uge · ' + c.month + ' p i ' + esc(monthName(parseYmd(S.day))) + '</div>' +
-    '<div class="btns"><button class="btn secondary" data-a="undo">' + icon('undo', 20, 2.4) + 'Fortryd</button>' +
-    '<button class="btn" style="background:' + p.color + '" data-a="close">Super!</button></div></div></div>';
+    '<div class="btns"' + (c.bonus ? ' style="grid-template-columns:1fr"' : '') + '>' + (c.bonus ? '' : '<button class="btn secondary" data-a="undo">' + icon('undo', 20, 2.4) + 'Fortryd</button>') +
+    '<button class="btn" style="background:' + p.color + '" data-a="close">' + (c.bonus ? 'Tak!' : 'Super!') + '</button></div></div></div>';
+}
+
+// Ny bonus fra en forælder → fejring på tavlen
+function checkBonus(list) {
+  if (!S.seenAdj) { S.seenAdj = {}; list.forEach(function (a) { S.seenAdj[a.id] = true; }); return; }
+  list.forEach(function (a) {
+    if (S.seenAdj[a.id]) { return; }
+    S.seenAdj[a.id] = true;
+    if (!(a.pts > 0) || a.kind === 'fix' || Date.now() - (a.at || 0) > 10 * 60 * 1000) { return; }
+    var k = memberById(S.family, a.kid);
+    var pt = points(a.kid);
+    S.cele = {
+      key: a.id, kid: a.kid, bonus: true, head: 'Bonus fra ' + (a.byName || 'mor og far') + '!',
+      body: (a.reason ? a.reason + ' · ' : '') + '+' + a.pts + ' point til ' + k.name, task: 'Bonus', reward: '', big: a.pts >= 20,
+      week: pt.week, month: pt.month
+    };
+    renderCele();
+    clearTimeout(celeTimer);
+    celeTimer = setTimeout(function () { if (S.cele && S.cele.key === a.id) { S.cele = null; renderCele(); } }, 9000);
+  });
 }
 
 // ---------- Handlinger ----------
@@ -381,7 +434,7 @@ function toggleChore(date, choreId, kidId) {
   if (!chore) { return; }
   var id = completionId(date, choreId, kidId);
   if (isDone(date, choreId, kidId)) {
-    store.del('completions/' + id).catch(report);
+    store.del(F('completions/' + id)).catch(report);
     return;
   }
   var before = points(kidId);
@@ -390,7 +443,7 @@ function toggleChore(date, choreId, kidId) {
   var b = periodBounds(parseYmd(S.day));
   var inWeek = date >= b.weekFrom && date <= b.weekTo;
   var inMonth = date >= b.monthFrom && date <= b.monthTo;
-  store.set('completions/' + id, { date: date, chore: choreId, kid: kidId, pts: pts, at: Date.now(), by: 'tablet' }).catch(report);
+  store.set(F('completions/' + id), { date: date, chore: choreId, kid: kidId, pts: pts, at: Date.now(), by: 'tablet' }).catch(report);
   var k = memberById(S.family, kidId);
   var head = pick(HEADS) + ', ' + k.name + '!';
   var reward = '', big = false;
@@ -426,11 +479,11 @@ function onClick(e) {
   else if (a === 'pack') {
     var date = el.getAttribute('data-date');
     var id = packedId(date, el.getAttribute('data-ev'), el.getAttribute('data-idx'));
-    if (S.packed[id]) { store.del('packed/' + id).catch(report); }
-    else { store.set('packed/' + id, { date: date, at: Date.now() }).catch(report); }
+    if (S.packed[id]) { store.del(F('packed/' + id)).catch(report); }
+    else { store.set(F('packed/' + id), { date: date, at: Date.now() }).catch(report); }
   }
   else if (a === 'undo') {
-    if (S.cele) { store.del('completions/' + S.cele.key).catch(report); }
+    if (S.cele && !S.cele.bonus) { store.del(F('completions/' + S.cele.key)).catch(report); }
     S.cele = null; renderCele();
   }
   else if (a === 'close') { S.cele = null; renderCele(); }

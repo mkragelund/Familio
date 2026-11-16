@@ -125,44 +125,73 @@ export function newId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-// Startdata for en ny familie
-export function seedFamily(adminEmail) {
+// Koder og id'er
+var CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export function randomCode(n) {
+  var out = '';
+  var buf = null;
+  try { buf = new Uint32Array(n); (window.crypto || window.msCrypto).getRandomValues(buf); } catch (e) { buf = null; }
+  for (var i = 0; i < n; i++) {
+    var r = buf ? buf[i] : Math.floor(Math.random() * 4294967296);
+    out += CODE_ALPHABET.charAt(r % CODE_ALPHABET.length);
+  }
+  return out;
+}
+export function familyIdNew() { return 'f' + randomCode(11).toLowerCase(); }
+export function formatCode(c) { c = String(c || '').toUpperCase(); return c.length === 8 ? c.slice(0, 4) + '-' + c.slice(4) : c; }
+export function cleanCode(c) { return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+
+export var KID_COLORS = ['blue', 'orange', 'green', 'pink'];
+export var ADULT_COLORS = ['purple', 'teal', 'pink', 'green'];
+
+export function initials(name) {
+  var w = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!w.length) { return '?'; }
+  if (w.length === 1) { return w[0].slice(0, 3); }
+  return (w[0].charAt(0) + w[1].charAt(0)).toUpperCase();
+}
+
+export var DEFAULT_GOALS = { weekPts: 120, weekReward: '', monthPts: 450, monthReward: '100 kr. i lommepenge' };
+
+export function defaultChores(kidIds) {
+  return [
+    { id: 'daek', label: 'Dække bord', pts: 5, kids: kidIds.slice(), icon: 'daek' },
+    { id: 'tag', label: 'Tage af bordet', pts: 5, kids: kidIds.slice(), icon: 'tag' },
+    { id: 'opvask', label: 'Vaske op', pts: 10, kids: kidIds.slice(), icon: 'opvask' },
+    { id: 'vaer', label: 'Rydde værelse', pts: 10, kids: kidIds.slice(), icon: 'vaer' },
+    { id: 'stoev', label: 'Støvsuge', pts: 10, kids: kidIds.slice(), icon: 'stoev' }
+  ];
+}
+
+// Ny familie ud fra opsætningen. kids: [{name, color}]
+export function seedFamily(o) {
+  var kids = (o.kids || []).filter(function (k) { return String(k.name || '').trim(); }).map(function (k, i) {
+    var name = String(k.name).trim();
+    return { id: 'k' + randomCode(5).toLowerCase(), name: name, short: initials(name), color: k.color || KID_COLORS[i % KID_COLORS.length], kind: 'child' };
+  });
+  var goals = {};
+  kids.forEach(function (k) { goals[k.id] = Object.assign({}, DEFAULT_GOALS); });
+  var parentNames = {};
+  parentNames[o.parentUid] = o.parentName;
   return {
-    name: 'Familien Kragelund',
-    admins: adminEmail ? [String(adminEmail).toLowerCase()] : [],
+    name: String(o.name || '').trim() || 'Vores familie',
+    parents: [o.parentUid],
+    parentNames: parentNames,
     tablets: [],
-    members: [
-      { id: 'jc', name: 'Jens Christian', short: 'JC', color: 'blue', kind: 'child' },
-      { id: 'ida', name: 'Ida Marie', short: 'IM', color: 'orange', kind: 'child' },
-      { id: 'mor', name: 'Mor', short: 'Mor', color: 'purple', kind: 'adult' },
-      { id: 'far', name: 'Far', short: 'Far', color: 'teal', kind: 'adult' }
-    ],
-    chores: [
-      { id: 'daek', label: 'Dække bord', pts: 5, kids: ['jc', 'ida'], icon: 'daek' },
-      { id: 'tag', label: 'Tage af bordet', pts: 5, kids: ['jc', 'ida'], icon: 'tag' },
-      { id: 'opvask', label: 'Vaske op', pts: 10, kids: ['jc', 'ida'], icon: 'opvask' },
-      { id: 'vaer', label: 'Rydde værelse', pts: 10, kids: ['jc', 'ida'], icon: 'vaer' },
-      { id: 'stoev', label: 'Støvsuge', pts: 10, kids: ['jc', 'ida'], icon: 'stoev' },
-      { id: 'laes', label: 'Læse 15 min', pts: 10, kids: ['jc'], icon: 'laes', daily: true },
-      { id: 'oejen', label: 'Øjenklap', pts: 10, kids: ['ida'], icon: 'oejen', daily: true }
-    ],
-    goals: {
-      jc: { weekPts: 100, weekReward: '', monthPts: 400, monthReward: '100 kr. i lommepenge' },
-      ida: { weekPts: 100, weekReward: '', monthPts: 400, monthReward: '100 kr. i lommepenge' }
-    },
-    drivers: ['Mor', 'Far', 'Bedstefar'],
-    settings: { nightFrom: '21:00', nightTo: '06:00' }
+    members: kids.concat([{ id: o.parentUid, name: o.parentName, short: o.parentName.length <= 4 ? o.parentName : initials(o.parentName), color: ADULT_COLORS[0], kind: 'adult' }]),
+    chores: defaultChores(kids.map(function (k) { return k.id; })),
+    goals: goals,
+    drivers: [o.parentName],
+    settings: { nightFrom: '21:00', nightTo: '06:00' },
+    createdAt: Date.now()
   };
 }
 
-// De faste aktiviteter Morten har oplyst
-export function seedEvents(startDate) {
-  var s = startDate || ymd(mondayOf(today()));
-  return [
-    { id: 'padel-jc', title: 'Padel', who: 'jc', type: 'rec', days: [4], freq: 'w1', start: s, end: '', from: '15:00', to: '16:00', allDay: false, driver: '', pack: [], showOnTablet: true, exceptions: {} },
-    { id: 'fodbold-ida-ti', title: 'Fodbold', who: 'ida', type: 'rec', days: [2], freq: 'w1', start: s, end: '', from: '16:30', to: '18:00', allDay: false, driver: '', pack: [], showOnTablet: true, exceptions: {} },
-    { id: 'fodbold-ida-so', title: 'Fodbold', who: 'ida', type: 'rec', days: [7], freq: 'w1', start: s, end: '', from: '11:00', to: '12:30', allDay: false, driver: '', pack: [], showOnTablet: true, exceptions: {} }
-  ];
+// Voksen-medlem når en ny forælder tilslutter sig
+export function adultMember(uid, name, family) {
+  var used = ((family && family.members) || []).map(function (m) { return m.color; });
+  var color = ADULT_COLORS.filter(function (c) { return used.indexOf(c) < 0; })[0] || 'teal';
+  return { id: uid, name: name, short: name.length <= 4 ? name : initials(name), color: color, kind: 'adult' };
 }
 
 export function memberById(family, id) {

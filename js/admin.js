@@ -4,20 +4,31 @@ import { APP_VERSION } from './config.js';
 import {
   ymd, parseYmd, today, addDays, mondayOf, weekDays, isoWeek, weekRangeLabel, DAY_NAMES, DAY_2,
   eventsOn, timeLabel, recurrenceLabel, sumPoints, periodBounds, memberById, kidsOf, shortDate, longDate,
-  monthName, seedFamily, seedEvents, newId, dow
+  monthName, seedFamily, newId, dow, familyIdNew, randomCode, formatCode, cleanCode, adultMember, KID_COLORS, initials
 } from './model.js';
 import { esc, pal, icon, logo, avatar, toast } from './ui.js';
 
 var store;
 var S = {
+  fid: null, userDoc: null, onboard: null, invite: null,
   user: null, authReady: false, family: null, famState: 'loading', events: [], meals: {}, completions: [], adjustments: [], pairing: [],
   tab: 'uge', weekMon: mondayOf(today()), sheet: null, form: null, loginErr: '', busy: false
 };
 var app = document.getElementById('app');
-var unsubs = [], famUnsub = null, mealsUnsub = null;
+var unsubs = [], famUnsub = null, mealsUnsub = null, userUnsub = null;
+function F(p) { return 'families/' + S.fid + (p ? '/' + p : ''); }
+// Familie-relative kald
+var fs = {
+  watchDoc: function (p, cb, e) { return store.watchDoc(F(p), cb, e); },
+  watchColl: function (p, w, cb, e) { return store.watchColl(F(p), w, cb, e); },
+  set: function (p, d, m) { return store.set(F(p), d, m); },
+  update: function (p, d) { return store.update(F(p), d); },
+  add: function (p, d) { return store.add(F(p), d); },
+  del: function (p) { return store.del(F(p)); }
+};
+var JOIN = cleanCode((location.search.match(/[?&]join=([A-Za-z0-9-]+)/) || [])[1] || '');
 var pendingRender = false;
 
-var EMAIL_KEY = 'familio-email';
 
 function boot() {
   app.innerHTML = '<div class="center-screen"><div class="spinner" aria-label="Indlæser"></div></div>';
@@ -27,7 +38,7 @@ function boot() {
       S.authReady = true;
       if (u && u.anon) { u = null; }
       S.user = u;
-      if (u) { watchFamily(); } else { stopAll(); S.family = null; S.famState = 'loading'; }
+      if (u) { watchUser(); } else { stopAll(); S.family = null; S.fid = null; S.famState = 'loading'; }
       render();
     });
   }).catch(function (e) {
@@ -41,15 +52,33 @@ function boot() {
 }
 
 function stopAll() {
+  if (userUnsub) { userUnsub(); userUnsub = null; }
   unsubs.forEach(function (u) { u(); }); unsubs = [];
   if (famUnsub) { famUnsub(); famUnsub = null; }
   if (mealsUnsub) { mealsUnsub(); mealsUnsub = null; }
 }
 
-function watchFamily() {
+function watchUser() {
   stopAll();
   S.famState = 'loading';
-  famUnsub = store.watchDoc('', function (fam) {
+  userUnsub = store.watchDoc('users/' + S.user.uid, function (doc) {
+    S.userDoc = doc;
+    var fid = doc && doc.familyId;
+    if (fid && fid !== S.fid) { S.fid = fid; S.family = null; watchFamily(); }
+    else if (!fid) {
+      S.fid = null; S.family = null; S.famState = 'none';
+      if (!S.onboard) { S.onboard = { step: JOIN ? 'join' : 'start', code: JOIN, role: '', name: '', kids: [{ name: '', color: 'blue' }, { name: '', color: 'orange' }], err: '' }; }
+    }
+    render();
+  }, function (e) { S.famState = 'error'; S.famErr = e && e.message; render(); });
+}
+
+function watchFamily() {
+  unsubs.forEach(function (u) { u(); }); unsubs = [];
+  if (famUnsub) { famUnsub(); }
+  if (mealsUnsub) { mealsUnsub(); mealsUnsub = null; }
+  S.famState = 'loading';
+  famUnsub = fs.watchDoc('', function (fam) {
     var first = !S.family;
     S.family = fam;
     S.famState = fam ? 'ok' : 'missing';
@@ -59,6 +88,10 @@ function watchFamily() {
     S.family = null;
     S.famState = (err && /permission/i.test(err.code || err.message || '')) ? 'denied' : 'error';
     S.famErr = err && err.message;
+    if (S.famState === 'denied') {
+      // Jeg er ikke (længere) med i familien – start forfra
+      store.set('users/' + S.user.uid, { familyId: '' }, true).catch(function () {});
+    }
     render();
   });
 }
@@ -68,17 +101,16 @@ function subscribeData() {
   var t = today();
   var prevMonth = ymd(new Date(t.getFullYear(), t.getMonth() - 1, 1));
   var from = ymd(addDays(mondayOf(t), -7)) < prevMonth ? ymd(addDays(mondayOf(t), -7)) : prevMonth;
-  unsubs.push(store.watchColl('events', null, function (l) { S.events = l; render(); }));
-  unsubs.push(store.watchColl('completions', ['date', '>=', from], function (l) { S.completions = l; render(); }));
-  unsubs.push(store.watchColl('adjustments', ['date', '>=', from], function (l) { S.adjustments = l; render(); }));
-  unsubs.push(store.watchColl('pairing', null, function (l) { S.pairing = l; render(); }, function () { S.pairing = []; }));
+  unsubs.push(fs.watchColl('events', null, function (l) { S.events = l; render(); }));
+  unsubs.push(fs.watchColl('completions', ['date', '>=', from], function (l) { S.completions = l; render(); }));
+  unsubs.push(fs.watchColl('adjustments', ['date', '>=', from], function (l) { S.adjustments = l; render(); }));
   watchMeals();
 }
 
 function watchMeals() {
   if (mealsUnsub) { mealsUnsub(); }
   // denne uge + ugen før (til "kopiér sidste uge")
-  mealsUnsub = store.watchColl('meals', ['date', '>=', ymd(addDays(S.weekMon, -7))], function (l) {
+  mealsUnsub = fs.watchColl('meals', ['date', '>=', ymd(addDays(S.weekMon, -7))], function (l) {
     var m = {}; l.forEach(function (x) { m[x.id] = x.text || ''; }); S.meals = m; render();
   });
 }
@@ -95,6 +127,7 @@ function render() {
   if (!S.authReady) { return; }
   if (!S.user) { app.innerHTML = renderLogin(); return; }
   if (S.famState === 'loading') { app.innerHTML = '<div class="center-screen"><div class="spinner" aria-label="Indlæser"></div></div>'; return; }
+  if (S.famState === 'none') { app.innerHTML = renderOnboard(); return; }
   if (S.famState !== 'ok') { app.innerHTML = renderNoFamily(); return; }
   var scroll = window.scrollY;
   var sheetScroll = document.querySelector('.sheet-body') ? document.querySelector('.sheet-body').scrollTop : 0;
@@ -113,29 +146,66 @@ function render() {
   document.body.style.overflow = S.sheet ? 'hidden' : '';
 }
 
+var GOOGLE_G = '<svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.7 13.2l7.8 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.8c4.3-4 6.9-9.9 6.9-17.2z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-2.9-.8-4.7s.3-3.3.8-4.7l-7.8-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.8l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.8c-2.1 1.4-4.8 2.3-8.5 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.8 6.1C6.6 42.6 14.6 48 24 48z"/></svg>';
+
 function renderLogin() {
-  var email = '';
-  try { email = localStorage.getItem(EMAIL_KEY) || ''; } catch (e) { /* */ }
+  var re = store.redirectError && store.redirectError();
+  var err = S.loginErr || (re ? 'Login mislykkedes (' + (re.code || re.message) + ').' : '');
   return '<div class="login">' + logo(88) +
-    '<div style="text-align:center"><div class="display" style="font-size:40px;line-height:1">Familio</div><div class="muted" style="font-weight:700;margin-top:6px">Log ind for at planlægge</div></div>' +
-    '<form id="login" autocomplete="on">' +
-    '<div class="field"><label for="email">E-mail</label><input class="input" id="email" name="email" type="email" autocomplete="username" required value="' + esc(email) + '"></div>' +
-    '<div class="field"><label for="pw">Kode</label><input class="input" id="pw" name="pw" type="password" autocomplete="current-password" required minlength="6"></div>' +
-    (S.loginErr ? '<div class="err" role="alert">' + esc(S.loginErr) + '</div>' : '') +
-    '<button class="btn block" type="submit" style="height:54px"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? 'Logger ind…' : 'Log ind') + '</button></form>' +
-    '<p class="hint" style="text-align:center">Du forbliver logget ind på denne telefon.</p></div>';
+    '<div style="text-align:center"><div class="display" style="font-size:40px;line-height:1">Familio</div><div class="muted" style="font-weight:700;margin-top:6px">Familiens ugeplan – madplan, aktiviteter og pligter</div></div>' +
+    (JOIN ? '<div class="card" style="width:100%;text-align:center"><b>Du er inviteret til en familie</b><span class="hint">Log ind for at tilslutte dig med koden ' + esc(formatCode(JOIN)) + '</span></div>' : '') +
+    '<button class="btn secondary block" style="height:56px;font-size:17px" data-a="google"' + (S.busy ? ' disabled' : '') + '>' + GOOGLE_G + (S.busy ? 'Logger ind…' : 'Fortsæt med Google') + '</button>' +
+    (err ? '<div class="err" role="alert">' + esc(err) + '</div>' : '') +
+    '<p class="hint" style="text-align:center">Du forbliver logget ind på denne telefon. Børnene skal ikke logge ind – de bruger tavlen.</p></div>';
+}
+
+function renderOnboard() {
+  var o = S.onboard;
+  var h = '<div class="login" style="align-items:stretch">' + '<div style="display:flex;justify-content:center">' + logo(64) + '</div>';
+  if (o.step === 'start') {
+    h += '<div style="text-align:center"><div class="display" style="font-size:30px">Velkommen' + (S.user.name ? ', ' + esc(S.user.name.split(' ')[0]) : '') + '</div>' +
+      '<p class="muted" style="font-weight:600">Opret jeres familie, eller tilslut dig en familie, du er inviteret til.</p></div>' +
+      '<button class="btn block" style="height:56px" data-a="ob" data-v="create">Opret ny familie</button>' +
+      '<button class="btn secondary block" style="height:56px" data-a="ob" data-v="join">Jeg har en invitationskode</button>';
+  } else if (o.step === 'join') {
+    h += '<div class="display" style="font-size:26px;text-align:center">Tilslut familie</div>' +
+      '<div class="field"><label for="ob-code">Invitationskode</label><input class="input" id="ob-code" data-ob="code" autocapitalize="characters" autocomplete="off" placeholder="fx KRAG-7F3Q" value="' + esc(formatCode(o.code)) + '" style="font-size:22px;letter-spacing:.1em;text-transform:uppercase"></div>' +
+      roleField(o) +
+      (o.err ? '<div class="err" role="alert">' + esc(o.err) + '</div>' : '') +
+      '<button class="btn block" style="height:54px" data-a="ob-join"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? 'Tilslutter…' : 'Tilslut') + '</button>' +
+      '<button class="btn ghost" data-a="ob" data-v="start">Tilbage</button>';
+  } else {
+    h += '<div class="display" style="font-size:26px;text-align:center">Opret jeres familie</div>' +
+      '<div class="field"><label for="ob-name">Familiens navn</label><input class="input" id="ob-name" data-ob="name" placeholder="fx Familien Kragelund" value="' + esc(o.name) + '"></div>' +
+      roleField(o) +
+      '<div class="field"><span class="label">Børn</span>';
+    o.kids.forEach(function (k, i) {
+      h += '<div style="display:flex;gap:8px;align-items:center"><label class="sr" for="ob-kid-' + i + '">Barn ' + (i + 1) + '</label>' +
+        '<input class="input" id="ob-kid-' + i + '" data-obkid="' + i + '" placeholder="Barnets navn" value="' + esc(k.name) + '">' +
+        '<button class="iconbtn" data-a="ob-color" data-i="' + i + '" aria-label="Skift farve" style="background:' + pal({ color: k.color }).color + ';border-radius:50%;width:40px;height:40px;flex-shrink:0"></button>' +
+        (o.kids.length > 1 ? '<button class="iconbtn" data-a="ob-kid-del" data-i="' + i + '" aria-label="Fjern barn">' + icon('x', 16, 2.4) + '</button>' : '') + '</div>';
+    });
+    h += (o.kids.length < 6 ? '<button class="btn dashed" data-a="ob-kid-add">+ Tilføj barn</button>' : '') + '</div>' +
+      '<p class="hint">I får standardpligter (dække bord, tage af bordet, vaske op, rydde værelse, støvsuge) og mål på 120 point om ugen og 450 om måneden. Alt kan rettes bagefter.</p>' +
+      (o.err ? '<div class="err" role="alert">' + esc(o.err) + '</div>' : '') +
+      '<button class="btn block" style="height:54px" data-a="ob-create"' + (S.busy ? ' disabled' : '') + '>' + (S.busy ? 'Opretter…' : 'Opret familien') + '</button>' +
+      '<button class="btn ghost" data-a="ob" data-v="start">Tilbage</button>';
+  }
+  h += '<p class="foot">Logget ind som ' + esc(S.user.email) + ' · <button class="btn ghost" style="min-height:24px;padding:0;font-size:12px;text-decoration:underline" data-a="logout">Log ud</button></p></div>';
+  return h;
+}
+
+function roleField(o) {
+  var roles = ['Mor', 'Far'];
+  var custom = o.role && roles.indexOf(o.role) < 0;
+  return '<div class="field"><span class="label">Hvad kalder børnene dig?</span><div class="chips">' +
+    roles.map(function (r) { return '<button class="chip" data-a="ob-role" data-v="' + r + '" aria-pressed="' + (o.role === r) + '">' + r + '</button>'; }).join('') +
+    '<label class="sr" for="ob-role">Andet navn</label><input class="input" id="ob-role" data-ob="role" placeholder="Andet" style="width:130px;height:44px" value="' + esc(custom ? o.role : '') + '"></div></div>';
 }
 
 function renderNoFamily() {
-  var h = '<div class="center-screen">' + logo(72);
-  if (S.famState === 'missing' || S.famState === 'denied') {
-    h += '<b class="display" style="font-size:26px">Velkommen til Familio</b>' +
-      '<p class="muted" style="max-width:380px">Er du den første forælder, så opret familien nu. Ellers skal den anden forælder tilføje <b>' + esc(S.user.email) + '</b> under Indstillinger › Forældre.</p>' +
-      '<button class="btn" data-a="create-family"' + (S.busy ? ' disabled' : '') + '>Opret familien</button>';
-  } else {
-    h += '<b>Der skete en fejl</b><p class="muted">' + esc(S.famErr || '') + '</p>';
-  }
-  return h + '<button class="btn ghost" data-a="logout">Log ud</button></div>';
+  return '<div class="center-screen">' + logo(72) + '<b>Der skete en fejl</b><p class="muted">' + esc(S.famErr || 'Kunne ikke hente familien.') + '</p>' +
+    '<button class="btn" onclick="location.reload()">Prøv igen</button><button class="btn ghost" data-a="logout">Log ud</button></div>';
 }
 
 function renderTop(title, sub, withWeek) {
@@ -204,8 +274,7 @@ function renderPoints() {
     h += '<div class="kidstat" style="background:' + p.tint + ';color:' + p.text + '"><b style="font-size:14px">' + esc(k.name) + '</b>' +
       '<span class="big">' + w + '</span><span class="small">af ' + (+g.weekPts || 0) + ' denne uge</span>' +
       '<span class="small" style="margin-top:4px">' + m + ' af ' + (+g.monthPts || 0) + ' i ' + esc(mName) + '</span>' +
-      '<div class="adj"><button data-a="adjust" data-kid="' + k.id + '" data-pts="-5" aria-label="Træk 5 point fra ' + esc(k.name) + '">−5</button>' +
-      '<button data-a="adjust" data-kid="' + k.id + '" data-pts="5" aria-label="Giv 5 point til ' + esc(k.name) + '">+5</button></div></div>';
+      '<div class="adj"><button data-a="bonus" data-kid="' + k.id + '" style="grid-column:span 2">' + icon('star', 16, 2.2) + ' Giv bonus</button></div></div>';
   });
   h += '</div>';
 
@@ -217,7 +286,7 @@ function renderPoints() {
   if (!log.length) { h += '<div class="item"><span class="muted">Ingen endnu</span></div>'; }
   log.forEach(function (r) {
     var k = memberById(S.family, r.o.kid);
-    var label = r.kind === 'c' ? choreLabel(r.o.chore) : (r.o.pts > 0 ? 'Bonus fra ' : 'Rettelse fra ') + (r.o.by || 'forælder');
+    var label = r.kind === 'c' ? choreLabel(r.o.chore) : (r.o.pts > 0 ? 'Bonus' : 'Rettelse') + (r.o.reason ? ': ' + r.o.reason : '') + ' (' + (r.o.byName || 'forælder') + ')';
     var when = r.at ? whenLabel(r.at) : shortDate(parseYmd(r.o.date));
     h += '<div class="item"><div class="grow"><b>' + esc(k.name) + ' · ' + esc(label) + '</b><span>' + esc(when) + (r.kind === 'c' && r.o.date !== ymd(new Date(r.at || Date.now())) ? ' · for ' + esc(shortDate(parseYmd(r.o.date))) : '') +
       ' · ' + (r.o.pts > 0 ? '+' : '') + r.o.pts + ' point</span></div>' +
@@ -286,6 +355,7 @@ function renderSheet() {
   if (s.kind === 'form') { return renderEventForm(); }
   if (s.kind === 'settings') { return renderSettings(); }
   if (s.kind === 'chore') { return renderChoreForm(); }
+  if (s.kind === 'bonus') { return renderBonus(); }
   return '';
 }
 
@@ -393,28 +463,34 @@ function renderEventForm() {
 function renderSettings() {
   var fam = S.family;
   var b = '';
-  b += '<div class="section"><span class="label">Forældre (admin)</span><div class="list">';
-  (fam.admins || []).forEach(function (e) {
-    b += '<div class="item"><div class="grow"><b>' + esc(e) + '</b>' + (e === S.user.email ? '<span>Dig</span>' : '') + '</div>' +
-      (e !== S.user.email ? '<button class="iconbtn" data-a="admin-del" data-v="' + esc(e) + '" aria-label="Fjern ' + esc(e) + '">' + icon('x', 16, 2.4) + '</button>' : '') + '</div>';
+  b += '<div class="section"><span class="label">Familien</span><div class="card"><b>' + esc(fam.name) + '</b><span class="hint">Alle forældre har samme rettigheder.</span></div></div>';
+  b += '<div class="section"><span class="label">Forældre</span><div class="list">';
+  (fam.parents || []).forEach(function (uid) {
+    var nm = (fam.parentNames && fam.parentNames[uid]) || 'Forælder';
+    b += '<div class="item"><div class="grow"><b>' + esc(nm) + '</b>' + (uid === S.user.uid ? '<span>Dig</span>' : '') + '</div>' +
+      (uid !== S.user.uid ? '<button class="iconbtn" data-a="parent-del" data-v="' + esc(uid) + '" aria-label="Fjern ' + esc(nm) + '">' + icon('x', 16, 2.4) + '</button>' : '') + '</div>';
   });
-  b += '<form class="item" id="adminform" style="gap:8px"><label for="adminnew" class="sr">Tilføj forælder (e-mail)</label><input id="adminnew" class="input" type="email" style="border:0;padding:0;height:44px" placeholder="Tilføj e-mail, fx Katrines">' +
-    '<button class="btn" type="submit" style="min-height:36px;padding:0 12px;font-size:14px">Tilføj</button></form></div>' +
-    '<span class="hint">Opret også personen under Authentication › Users i Firebase med den fælles kode.</span></div>';
+  b += '</div>';
+  if (S.invite) {
+    var link = location.origin + location.pathname + '?join=' + S.invite.code;
+    b += '<div class="card" style="text-align:center;gap:8px"><span class="label">Invitationskode · gyldig i 7 dage</span>' +
+      '<div class="display" style="font-size:34px;letter-spacing:.1em">' + esc(formatCode(S.invite.code)) + '</div>' +
+      '<span class="hint" style="word-break:break-all">' + esc(link) + '</span>' +
+      '<div class="row2"><button class="btn secondary" data-a="invite-copy" data-v="' + esc(link) + '">' + icon('copy', 16, 2) + 'Kopiér link</button>' +
+      '<button class="btn" data-a="invite-share" data-v="' + esc(link) + '">Del</button></div></div>';
+  } else {
+    b += '<button class="btn dashed" data-a="invite">+ Inviter forælder</button>';
+  }
+  b += '</div>';
 
   b += '<div class="section"><span class="label">Tablets</span><div class="list">';
-  var pend = S.pairing.filter(function (p) { return (fam.tablets || []).indexOf(p.id) < 0; });
-  pend.forEach(function (p) {
-    b += '<div class="item"><div class="grow"><b>Ny tablet · kode ' + esc(p.code || p.id.slice(0, 6).toUpperCase()) + '</b><span>Venter på godkendelse</span></div>' +
-      '<button class="btn" style="min-height:36px;padding:0 12px;font-size:14px" data-a="tablet-ok" data-v="' + esc(p.id) + '">Godkend</button>' +
-      '<button class="iconbtn" data-a="tablet-no" data-v="' + esc(p.id) + '" aria-label="Afvis">' + icon('x', 16, 2.4) + '</button></div>';
-  });
-  (fam.tablets || []).forEach(function (uid) {
-    b += '<div class="item"><div class="grow"><b>Tablet · kode ' + esc(uid.slice(0, 6).toUpperCase()) + '</b><span>Tilknyttet</span></div>' +
+  (fam.tablets || []).forEach(function (uid, i) {
+    b += '<div class="item"><div class="grow"><b>Tablet ' + (i + 1) + '</b><span>Tilknyttet</span></div>' +
       '<button class="iconbtn" data-a="tablet-del" data-v="' + esc(uid) + '" aria-label="Fjern tablet" style="color:var(--danger)">' + icon('trash', 18, 2) + '</button></div>';
   });
-  if (!pend.length && !(fam.tablets || []).length) { b += '<div class="item"><span class="muted">Åbn tavlen på tabletten – så dukker den op her med en kode.</span></div>'; }
-  b += '</div></div>';
+  b += '<form class="item" id="tabletform" style="gap:8px"><label for="tabletcode" class="sr">Kode fra tabletten</label><input id="tabletcode" class="input" autocapitalize="characters" autocomplete="off" style="border:0;padding:0;height:44px;text-transform:uppercase;letter-spacing:.1em" placeholder="Kode fra tavlen">' +
+    '<button class="btn" type="submit" style="min-height:36px;padding:0 12px;font-size:14px">Tilknyt</button></form></div>' +
+    '<span class="hint">Åbn ' + esc(location.origin + location.pathname.replace(/index\.html$/, '')) + 'tablet.html på tabletten – den viser en kode, som du skriver her.</span></div>';
 
   var st = fam.settings || {};
   b += '<div class="section"><span class="label">Tavlen</span><div class="card" style="padding:4px 16px">' +
@@ -431,7 +507,7 @@ function renderSettings() {
 
   b += '<div class="section"><span class="label">Push-påmindelser</span><div class="card"><b>Øjenklap – Ida Marie kl. 16.00</b><span class="hint">Kommer i næste version. Det kræver en lille planlagt funktion i Firebase.</span></div></div>';
 
-  b += '<div class="section"><span class="label">Konto</span><div class="list"><div class="item"><div class="grow"><b>' + esc(S.user.email) + '</b><span>Logget ind</span></div>' +
+  b += '<div class="section"><span class="label">Konto</span><div class="list"><div class="item"><div class="grow"><b>' + esc(S.user.name || S.user.email) + '</b><span>' + esc(S.user.email) + '</span></div>' +
     '<button class="btn danger" data-a="logout">Log ud</button></div></div></div>';
   if (DEMO) { b += '<button class="btn secondary" data-a="demo-reset">Nulstil demo-data</button>'; }
   b += '<p class="foot">Familio ' + esc(APP_VERSION) + '</p>';
@@ -466,28 +542,16 @@ function onSubmit(e) {
   var id = e.target.id;
   if (!id) { return; }
   e.preventDefault();
-  if (id === 'login') {
-    var email = e.target.email.value.trim().toLowerCase(), pw = e.target.pw.value;
-    try { localStorage.setItem(EMAIL_KEY, email); } catch (x) { /* */ }
-    S.busy = true; S.loginErr = ''; render();
-    store.signInEmail(email, pw).then(function () { S.busy = false; }).catch(function (err) {
-      S.busy = false;
-      var c = (err && err.code) || '';
-      S.loginErr = /invalid|wrong|not-found|user/.test(c) ? 'Forkert e-mail eller kode.' : /too-many/.test(c) ? 'For mange forsøg – vent lidt og prøv igen.' : /network/.test(c) ? 'Ingen forbindelse til internettet.' : 'Kunne ikke logge ind (' + c + ').';
-      render();
-    });
+  if (id === 'tabletform') {
+    linkTablet(document.getElementById('tabletcode').value);
   } else if (id === 'packform') {
     var v = document.getElementById('packnew').value.trim();
     var ev = findEvent(S.sheet.id);
-    if (v && ev) { store.update('events/' + ev.id, { pack: (ev.pack || []).concat([v]) }).catch(fail); }
+    if (v && ev) { fs.update('events/' + ev.id, { pack: (ev.pack || []).concat([v]) }).catch(fail); }
     document.getElementById('packnew').value = '';
-  } else if (id === 'adminform') {
-    var a = document.getElementById('adminnew').value.trim().toLowerCase();
-    if (a && a.indexOf('@') > 0) { store.update('', { admins: FV.union(a) }).then(function () { toast(a + ' er tilføjet'); }).catch(fail); }
-    document.getElementById('adminnew').value = '';
   } else if (id === 'driverform') {
     var d = document.getElementById('drivernew').value.trim();
-    if (d) { store.update('', { drivers: FV.union(d) }).catch(fail); }
+    if (d) { fs.update('', { drivers: FV.union(d) }).catch(fail); }
     document.getElementById('drivernew').value = '';
   }
   document.activeElement && document.activeElement.blur && document.activeElement.blur();
@@ -496,6 +560,8 @@ function onSubmit(e) {
 function onInput(e) {
   var t = e.target;
   if (t.hasAttribute('data-f') && S.form) { S.form[t.getAttribute('data-f')] = t.value; }
+  if (t.hasAttribute('data-ob') && S.onboard) { S.onboard[t.getAttribute('data-ob')] = t.getAttribute('data-ob') === 'code' ? cleanCode(t.value) : t.value; }
+  if (t.hasAttribute('data-obkid') && S.onboard) { S.onboard.kids[+t.getAttribute('data-obkid')].name = t.value; }
 }
 
 function onChange(e) {
@@ -505,19 +571,19 @@ function onChange(e) {
     var ds = t.getAttribute('data-meal'), v = t.value.trim();
     if ((S.meals[ds] || '') === v) { return; }
     S.meals[ds] = v;
-    (v ? store.set('meals/' + ds, { date: ds, text: v }) : store.del('meals/' + ds)).catch(fail);
+    (v ? fs.set('meals/' + ds, { date: ds, text: v }) : fs.del('meals/' + ds)).catch(fail);
     return;
   }
   if (t.hasAttribute('data-goal')) {
     var parts = t.getAttribute('data-goal').split('.');
     var val = /Pts$/.test(parts[1]) ? Math.max(0, parseInt(t.value, 10) || 0) : t.value.trim();
     var upd = {}; upd['goals.' + parts[0] + '.' + parts[1]] = val;
-    store.update('', upd).then(function () { toast('Gemt'); }).catch(fail);
+    fs.update('', upd).then(function () { toast('Gemt'); }).catch(fail);
     return;
   }
   if (t.hasAttribute('data-set')) {
     var u = {}; u['settings.' + t.getAttribute('data-set')] = t.value;
-    store.update('', u).then(function () { toast('Gemt'); }).catch(fail);
+    fs.update('', u).then(function () { toast('Gemt'); }).catch(fail);
   }
 }
 
@@ -535,10 +601,49 @@ function onClick(e) {
       var d = +el.getAttribute('data-d');
       S.weekMon = d === 0 ? mondayOf(today()) : addDays(S.weekMon, 7 * d);
       watchMeals(); render(); break;
-    case 'settings': S.sheet = { kind: 'settings' }; render(); break;
+    case 'settings': S.invite = null; S.sheet = { kind: 'settings' }; render(); break;
     case 'close-sheet': closeSheet(); break;
-    case 'logout': closeSheet(); store.signOut(); break;
-    case 'create-family': createFamily(); break;
+    case 'logout': closeSheet(); S.onboard = null; store.signOut(); break;
+    case 'google':
+      S.busy = true; S.loginErr = ''; render();
+      store.signInGoogle().then(function () { S.busy = false; render(); }).catch(function (err) {
+        S.busy = false;
+        var c = (err && err.code) || '';
+        S.loginErr = /popup-closed|cancelled/.test(c) ? '' : /network/.test(c) ? 'Ingen forbindelse til internettet.' : 'Kunne ikke logge ind (' + (c || err.message) + ').';
+        render();
+      });
+      break;
+    case 'ob': S.onboard.step = v; S.onboard.err = ''; render(); break;
+    case 'ob-role': S.onboard.role = v; render(); break;
+    case 'ob-color':
+      var ok = S.onboard.kids[+el.getAttribute('data-i')];
+      ok.color = KID_COLORS[(KID_COLORS.indexOf(ok.color) + 1) % KID_COLORS.length]; render(); break;
+    case 'ob-kid-add': S.onboard.kids.push({ name: '', color: KID_COLORS[S.onboard.kids.length % KID_COLORS.length] }); render(); break;
+    case 'ob-kid-del': S.onboard.kids.splice(+el.getAttribute('data-i'), 1); render(); break;
+    case 'ob-create': createFamily(); break;
+    case 'ob-join': joinFamily(); break;
+    case 'invite': createInvite(); break;
+    case 'invite-copy':
+      try { navigator.clipboard.writeText(v).then(function () { toast('Link kopieret'); }); } catch (x) { toast(v); }
+      break;
+    case 'invite-share':
+      if (navigator.share) { navigator.share({ title: 'Familio', text: 'Tilslut dig vores familie i Familio – kode ' + formatCode(S.invite.code), url: v }).catch(function () {}); }
+      else { try { navigator.clipboard.writeText(v); toast('Link kopieret'); } catch (x) { /* */ } }
+      break;
+    case 'parent-del':
+      if (window.confirm('Fjern ' + ((S.family.parentNames || {})[v] || 'forælderen') + ' fra familien?')) {
+        var pn = {}; pn['parentNames.' + v] = FV.deleteField();
+        fs.update('', Object.assign({ parents: FV.remove(v) }, pn)).catch(fail);
+      }
+      break;
+    case 'bonus':
+      S.form = { kid: el.getAttribute('data-kid'), pts: 10, reason: BONUS_REASONS[0], custom: '', err: '' };
+      S.sheet = { kind: 'bonus' }; render(); break;
+    case 'b-kid': f.kid = v; render(); break;
+    case 'b-pts': f.pts = +v; render(); break;
+    case 'b-reason': f.reason = v; f.custom = ''; render(); break;
+    case 'b-save': giveBonus(); break;
+    case 'b-fix': fixPoints(); break;
     case 'demo-reset': if (window.confirm('Nulstil demo-data?')) { store.reset(); closeSheet(); } break;
 
     case 'new-ev': S.form = blankForm(el.getAttribute('data-date')); S.sheet = { kind: 'form' }; render(); break;
@@ -560,18 +665,17 @@ function onClick(e) {
     case 'ev-driver-series': setDriverSeries(); break;
     case 'pack-del':
       var evp = findEvent(S.sheet.id);
-      if (evp) { var pk = (evp.pack || []).slice(); pk.splice(+el.getAttribute('data-i'), 1); store.update('events/' + evp.id, { pack: pk }).catch(fail); }
+      if (evp) { var pk = (evp.pack || []).slice(); pk.splice(+el.getAttribute('data-i'), 1); fs.update('events/' + evp.id, { pack: pk }).catch(fail); }
       break;
 
-    case 'adjust': adjust(el.getAttribute('data-kid'), +el.getAttribute('data-pts')); break;
     case 'del-log':
       var kind = el.getAttribute('data-kind'), lid = el.getAttribute('data-id');
-      if (window.confirm('Fjern registreringen? Pointene trækkes fra.')) { store.del((kind === 'c' ? 'completions/' : 'adjustments/') + lid).catch(fail); }
+      if (window.confirm('Fjern registreringen? Pointene trækkes fra.')) { fs.del((kind === 'c' ? 'completions/' : 'adjustments/') + lid).catch(fail); }
       break;
     case 'chore-pts':
       var ch = (S.family.chores || []).slice(), ci = +el.getAttribute('data-i');
       ch[ci] = Object.assign({}, ch[ci], { pts: Math.max(0, (+ch[ci].pts || 0) + (+el.getAttribute('data-d'))) });
-      store.update('', { chores: ch }).catch(fail); break;
+      fs.update('', { chores: ch }).catch(fail); break;
     case 'new-chore': S.form = { i: -1, label: '', pts: 5, kids: kidsOf(S.family).map(function (k) { return k.id; }), icon: 'star', err: '' }; S.sheet = { kind: 'chore' }; render(); break;
     case 'edit-chore':
       var c = S.family.chores[+el.getAttribute('data-i')];
@@ -583,16 +687,16 @@ function onClick(e) {
     case 'c-del':
       if (window.confirm('Slet pligten "' + f.label + '"? Point, der allerede er optjent, bliver stående.')) {
         var cl = (S.family.chores || []).slice(); cl.splice(f.i, 1);
-        store.update('', { chores: cl }).then(closeSheet).catch(fail);
+        fs.update('', { chores: cl }).then(closeSheet).catch(fail);
       }
       break;
 
-    case 'admin-del': if (window.confirm('Fjern ' + v + ' som forælder?')) { store.update('', { admins: FV.remove(v) }).catch(fail); } break;
-    case 'tablet-ok':
-      store.update('', { tablets: FV.union(v) }).then(function () { return store.del('pairing/' + v); }).then(function () { toast('Tabletten er tilknyttet'); }).catch(fail); break;
-    case 'tablet-no': store.del('pairing/' + v).catch(fail); break;
-    case 'tablet-del': if (window.confirm('Fjern adgangen for denne tablet?')) { store.update('', { tablets: FV.remove(v) }).catch(fail); } break;
-    case 'driver-del': if (window.confirm('Fjern ' + v + ' som chauffør?')) { store.update('', { drivers: FV.remove(v) }).catch(fail); } break;
+    case 'tablet-del':
+      if (window.confirm('Fjern adgangen for denne tablet?')) {
+        fs.update('', { tablets: FV.remove(v) }).then(function () { return store.del('tabletLinks/' + v); }).catch(fail);
+      }
+      break;
+    case 'driver-del': if (window.confirm('Fjern ' + v + ' som chauffør?')) { fs.update('', { drivers: FV.remove(v) }).catch(fail); } break;
   }
 }
 
@@ -602,21 +706,70 @@ function closeSheet() {
   render();
 }
 
+function myRole() { return String((S.onboard && S.onboard.role) || '').trim(); }
+
 function createFamily() {
+  var o = S.onboard;
+  o.err = '';
+  if (!String(o.name).trim()) { o.err = 'Skriv familiens navn.'; }
+  else if (!myRole()) { o.err = 'Vælg hvad børnene kalder dig.'; }
+  else if (!o.kids.some(function (k) { return String(k.name).trim(); })) { o.err = 'Skriv mindst ét barns navn.'; }
+  if (o.err) { render(); return; }
   S.busy = true; render();
-  var fam = seedFamily(S.user.email);
-  store.set('', fam).then(function () {
-    return Promise.all(seedEvents().map(function (ev) { var id = ev.id; delete ev.id; return store.set('events/' + id, ev); }));
+  var fid = familyIdNew();
+  var fam = seedFamily({ name: o.name, parentUid: S.user.uid, parentName: myRole(), kids: o.kids });
+  store.set('families/' + fid, fam).then(function () {
+    return store.set('users/' + S.user.uid, { familyId: fid, joinedAt: Date.now() }, true);
   }).then(function () {
-    S.busy = false; toast('Familien er oprettet');
-    if (S.famState !== 'ok') { watchFamily(); }
+    S.busy = false; S.onboard = null; toast('Familien er oprettet');
+    if (location.search) { history.replaceState(null, '', location.pathname); }
+  }).catch(function (e) { S.busy = false; o.err = 'Kunne ikke oprette familien: ' + ((e && (e.code || e.message)) || e); render(); });
+}
+
+function joinFamily() {
+  var o = S.onboard;
+  var code = cleanCode(o.code);
+  o.err = '';
+  if (code.length !== 8) { o.err = 'Koden skal have 8 tegn, fx KRAG-7F3Q.'; }
+  else if (!myRole()) { o.err = 'Vælg hvad børnene kalder dig.'; }
+  if (o.err) { render(); return; }
+  S.busy = true; render();
+  var fid;
+  store.get('invites/' + code).then(function (inv) {
+    if (!inv || !inv.familyId) { throw { msg: 'Koden findes ikke. Tjek den, eller bed om en ny.' }; }
+    if (inv.expiresAt < Date.now()) { throw { msg: 'Koden er udløbet. Bed om en ny invitation.' }; }
+    fid = inv.familyId;
+    var u = { parents: FV.union(S.user.uid), members: FV.union(adultMember(S.user.uid, myRole(), { members: [{ color: 'purple' }] })), drivers: FV.union(myRole()), joinCode: code };
+    u['parentNames.' + S.user.uid] = myRole();
+    return store.update('families/' + fid, u);
+  }).then(function () {
+    return store.set('users/' + S.user.uid, { familyId: fid, joinedAt: Date.now() }, true);
+  }).then(function () {
+    S.busy = false; S.onboard = null; toast('Velkommen i familien!');
+    if (location.search) { history.replaceState(null, '', location.pathname); }
   }).catch(function (e) {
     S.busy = false;
-    S.famState = 'error';
-    S.famErr = /permission/i.test((e && (e.code || e.message)) || '') ?
-      'Familien findes allerede. Bed den anden forælder tilføje ' + S.user.email + ' under Indstillinger › Forældre.' : (e && e.message);
+    o.err = (e && e.msg) || 'Kunne ikke tilslutte: ' + ((e && (e.code || e.message)) || e);
     render();
   });
+}
+
+function createInvite() {
+  var code = randomCode(8);
+  store.set('invites/' + code, { familyId: S.fid, createdBy: S.user.uid, expiresAt: Date.now() + 7 * 24 * 3600 * 1000 })
+    .then(function () { S.invite = { code: code }; render(); }).catch(fail);
+}
+
+function linkTablet(raw) {
+  var code = cleanCode(raw);
+  if (code.length !== 6) { toast('Koden fra tavlen har 6 tegn'); return; }
+  store.get('pairing/' + code).then(function (p) {
+    if (!p || !p.uid) { throw { msg: 'Koden findes ikke – tjek tavlen og prøv igen.' }; }
+    return fs.update('', { tablets: FV.union(p.uid) })
+      .then(function () { return store.set('tabletLinks/' + p.uid, { familyId: S.fid, at: Date.now() }); })
+      .then(function () { return store.del('pairing/' + code).catch(function () {}); });
+  }).then(function () { toast('Tabletten er tilknyttet'); var i = document.getElementById('tabletcode'); if (i) { i.value = ''; } })
+    .catch(function (e) { toast((e && e.msg) || 'Kunne ikke tilknytte: ' + ((e && (e.code || e.message)) || e)); });
 }
 
 function saveEvent() {
@@ -639,7 +792,7 @@ function saveEvent() {
   if (f.type === 'once') { ev.date = f.date; ev.endDate = f.endDate && f.endDate > f.date ? f.endDate : ''; }
   else { ev.days = f.days.slice().sort(); ev.freq = f.freq; ev.start = f.start; ev.end = f.end || ''; }
   var id = f.id || newId();
-  store.set('events/' + id, ev).then(function () {
+  fs.set('events/' + id, ev).then(function () {
     toast(f.id ? 'Ændringer gemt' : 'Aktiviteten er gemt');
     S.sheet = null; S.form = null; render();
   }).catch(fail);
@@ -650,22 +803,22 @@ function deleteEvent() {
   if (!ev) { return; }
   var msg = ev.type === 'once' ? 'Slet "' + ev.title + '"?' : 'Slet HELE serien "' + ev.title + '"? Vil du kun aflyse én gang, så brug "Aflys kun".';
   if (!window.confirm(msg)) { return; }
-  store.del('events/' + ev.id).then(function () { toast('Slettet'); S.sheet = null; render(); }).catch(fail);
+  fs.del('events/' + ev.id).then(function () { toast('Slettet'); S.sheet = null; render(); }).catch(fail);
 }
 
 function setCancelled(on) {
   var ev = findEvent(S.sheet.id), ds = S.sheet.date;
   if (!ev) { return; }
   var u = {}; u['exceptions.' + ds + '.cancelled'] = on ? true : FV.deleteField();
-  store.update('events/' + ev.id, u).then(function () { toast(on ? 'Aflyst denne gang' : 'Genåbnet'); }).catch(fail);
+  fs.update('events/' + ev.id, u).then(function () { toast(on ? 'Aflyst denne gang' : 'Genåbnet'); }).catch(fail);
 }
 
 function setDriver(name) {
   var ev = findEvent(S.sheet.id), ds = S.sheet.date;
   if (!ev) { return; }
-  if (ev.type === 'once') { store.update('events/' + ev.id, { driver: name }).catch(fail); return; }
+  if (ev.type === 'once') { fs.update('events/' + ev.id, { driver: name }).catch(fail); return; }
   var u = {}; u['exceptions.' + ds + '.driver'] = name === (ev.driver || '') ? FV.deleteField() : name;
-  store.update('events/' + ev.id, u).catch(fail);
+  fs.update('events/' + ev.id, u).catch(fail);
 }
 
 function setDriverSeries() {
@@ -673,12 +826,39 @@ function setDriverSeries() {
   var o = eventsOn([ev], ds)[0];
   if (!ev || !o) { return; }
   var u = { driver: o.driver || '' }; u['exceptions.' + ds + '.driver'] = FV.deleteField();
-  store.update('events/' + ev.id, u).then(function () { toast('Fast chauffør opdateret'); }).catch(fail);
+  fs.update('events/' + ev.id, u).then(function () { toast('Fast chauffør opdateret'); }).catch(fail);
 }
 
-function adjust(kid, pts) {
-  store.add('adjustments', { date: ymd(today()), kid: kid, pts: pts, at: Date.now(), by: (S.user.email || '').split('@')[0] })
-    .then(function () { toast((pts > 0 ? '+' : '') + pts + ' point til ' + memberById(S.family, kid).name); }).catch(fail);
+var BONUS_REASONS = ['Hjalp uden at blive spurgt', 'Ekstra opgave', 'God ved sin søskende', 'Flot opførsel'];
+
+function myName() { return ((S.family && S.family.parentNames) || {})[S.user.uid] || (S.user.name || '').split(' ')[0] || 'forælder'; }
+
+function giveBonus() {
+  var f = S.form;
+  var custom = (document.getElementById('b-custom') || {}).value;
+  var reason = String(custom || '').trim() || f.reason;
+  fs.add('adjustments', { date: ymd(today()), kid: f.kid, pts: f.pts, reason: reason, kind: 'bonus', byName: myName(), at: Date.now() })
+    .then(function () { toast('+' + f.pts + ' bonuspoint til ' + memberById(S.family, f.kid).name); S.sheet = null; S.form = null; render(); }).catch(fail);
+}
+
+function fixPoints() {
+  var f = S.form;
+  if (!window.confirm('Træk 5 point fra ' + memberById(S.family, f.kid).name + '? Brug det kun til at rette fejl.')) { return; }
+  fs.add('adjustments', { date: ymd(today()), kid: f.kid, pts: -5, reason: 'Rettelse', kind: 'fix', byName: myName(), at: Date.now() })
+    .then(function () { toast('5 point trukket fra'); S.sheet = null; S.form = null; render(); }).catch(fail);
+}
+
+function renderBonus() {
+  var f = S.form;
+  var kids = kidsOf(S.family).map(function (k) { return [k.id, k.name]; });
+  var b = '<div class="field"><span class="label">Til</span><div class="chips">' + chipsHtml(kids, 'b-kid', f.kid) + '</div></div>' +
+    '<div class="field"><span class="label">Point</span><div class="chips">' + chipsHtml([['5', '+5'], ['10', '+10'], ['20', '+20']], 'b-pts', String(f.pts)) + '</div></div>' +
+    '<div class="field"><span class="label">Hvorfor</span><div class="chips">' + chipsHtml(BONUS_REASONS.map(function (r) { return [r, r]; }), 'b-reason', f.reason) + '</div>' +
+    '<label class="sr" for="b-custom">Egen grund</label><input class="input" id="b-custom" placeholder="Eller skriv din egen grund"></div>' +
+    '<p class="hint">Bonussen vises med det samme som en fejring på tavlen.</p>';
+  var foot = '<div style="display:flex;flex-direction:column;gap:8px"><button class="btn block" style="height:54px" data-a="b-save">Giv +' + f.pts + ' point</button>' +
+    '<button class="btn ghost" style="font-size:14px;color:var(--muted)" data-a="b-fix">Ret en fejl: træk 5 point fra</button></div>';
+  return sheetFrame('Giv bonus', b, foot, '<button class="btn ghost" data-a="close-sheet">Annuller</button>');
 }
 
 function saveChore() {
@@ -691,7 +871,7 @@ function saveChore() {
   var list = (S.family.chores || []).slice();
   var c = { id: f.id || newId(), label: String(f.label).trim(), pts: Math.max(0, parseInt(f.pts, 10) || 0), kids: f.kids.slice(), icon: f.icon };
   if (f.i >= 0) { list[f.i] = Object.assign({}, list[f.i], c); } else { list.push(c); }
-  store.update('', { chores: list }).then(function () { toast('Pligten er gemt'); closeSheet(); }).catch(fail);
+  fs.update('', { chores: list }).then(function () { toast('Pligten er gemt'); closeSheet(); }).catch(fail);
 }
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {

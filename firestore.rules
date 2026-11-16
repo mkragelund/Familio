@@ -1,0 +1,59 @@
+rules_version = '2';
+
+// Sikkerhedsregler for Familios EGEN database ("familio") i projektet MK Work.
+// De påvirker IKKE (default)-databasen eller de andre apps i projektet.
+//
+// Forældre: logget ind med e-mail/adgangskode og står i familiens "admins"-liste.
+// Tablet:   anonymt login, og dens uid er godkendt i familiens "tablets"-liste.
+//           Tabletten må læse alt og krydse pligter og huskelister af – intet andet.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAnon() { return request.auth.token.firebase.sign_in_provider == 'anonymous'; }
+    function fam(fid) { return get(/databases/$(database)/documents/families/$(fid)).data; }
+    function isAdmin(fid) {
+      return signedIn() && !isAnon()
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() in fam(fid).admins;
+    }
+    function isTablet(fid) { return signedIn() && request.auth.uid in fam(fid).tablets; }
+    function isMember(fid) { return isAdmin(fid) || isTablet(fid); }
+
+    match /families/{fid} {
+      allow read: if isMember(fid);
+      // Første forælder opretter familien og står som eneste admin
+      allow create: if signedIn() && !isAnon()
+        && request.resource.data.admins == [request.auth.token.email.lower()];
+      allow update, delete: if isAdmin(fid);
+
+      // En ny tablet beder om at blive tilknyttet
+      match /pairing/{uid} {
+        allow create, update: if signedIn() && request.auth.uid == uid;
+        allow read: if (signedIn() && request.auth.uid == uid) || isAdmin(fid);
+        allow delete: if isAdmin(fid);
+      }
+
+      // Pligter krydset af (tablet og forældre)
+      match /completions/{id} {
+        allow read: if isMember(fid);
+        allow create: if isMember(fid)
+          && request.resource.data.pts is int
+          && request.resource.data.pts >= 0 && request.resource.data.pts <= 100;
+        allow delete: if isMember(fid);
+        allow update: if isAdmin(fid);
+      }
+
+      // Huskelister krydset af (tablet og forældre)
+      match /packed/{id} {
+        allow read, create, delete: if isMember(fid);
+      }
+
+      // Alt andet: events, meals, adjustments – kun forældre skriver
+      match /{coll}/{id} {
+        allow read: if isMember(fid);
+        allow write: if isAdmin(fid);
+      }
+    }
+  }
+}

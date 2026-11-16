@@ -5,7 +5,7 @@ Familiens ugeplan – madplan, aktiviteter, pligter og point. To dele:
 | Side | Til | Adresse |
 |---|---|---|
 | `index.html` | Forældre-appen (Katrine og Morten) på telefonen | `https://minfamilio.web.app/` |
-| `tablet.html` | Tavlen på den låste iPad i køkkenet – ingen login for børnene | `https://minfamilio.web.app/tablet.html` |
+| `tablet.html` | Tavlen på den låste iPad i køkkenet – en forælder logger ind én gang, børnene skal ikke logge ind | `https://minfamilio.web.app/tablet.html` |
 
 Ren HTML/CSS/JavaScript uden build-trin. Data ligger i Firebase (projekt **MK Work**, egen Firestore-database `familio`). Login med Google; hver familie har sit eget id, og forældre tilslutter sig med en invitationskode – så appen kan bruges af alle familier.
 
@@ -24,7 +24,7 @@ python3 -m http.server 8000
 2. **Database:** Firestore › *Create database* › navn `familio`, lokation `eur3`, *production mode*.
 3. **Regler:** Firestore › vælg databasen `familio` › *Rules* › indsæt indholdet af `firestore.rules` › *Publish*.
    (Reglerne gælder kun `familio`-databasen – de andre apps i MK Work påvirkes ikke.)
-4. **Login:** Authentication › *Sign-in method* › slå **Google** og **Anonymous** til (Anonymous bruges kun af tavlen).
+4. **Login:** Authentication › *Sign-in method* › slå **Google** til. (Anonymous skal IKKE slås til – det ville gælde for alle apps i MK Work.)
 5. **Hosting:** Hosting › *Add another site* › `minfamilio`. Tjek at `minfamilio.web.app` står under Authentication › Settings › *Authorized domains*.
 
 ## Første gang
@@ -32,7 +32,7 @@ python3 -m http.server 8000
 1. Log ind med Google i forældre-appen › **Opret ny familie** (navn, hvad børnene kalder dig, børnenes navne).
 2. Indstillinger › **Inviter forælder** › send linket/koden til den anden forælder. Hun/han logger ind med Google og tilslutter sig. Alle forældre har samme rettigheder.
 3. Åbn `tablet.html` på iPad'en i Safari › Del › **Føj til hjemmeskærm** › åbn Familio fra hjemmeskærmen.
-   Tavlen viser en kode på 6 tegn – skriv den i forældre-appen under Indstillinger › Tablets › **Tilknyt**.
+   Log ind med en forælders Google-konto én gang – så viser tavlen familien.
 4. På iPad'en: Indstillinger › Skærm og lysstyrke › Autolås › **Aldrig**, og evt. *Guidet adgang* så den bliver i Familio.
 
 ## Point

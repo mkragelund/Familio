@@ -3,7 +3,9 @@
 import { FIREBASE_CONFIG, DATABASE_ID } from './config.js';
 import { seedFamily, ymd, mondayOf, today, addDays, completionId } from './model.js';
 
-export var DEMO = !FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.indexOf('INDSÆT') === 0;
+// Demo: uden konfiguration, ved lokal udvikling (localhost) eller med ?demo i adressen
+export var DEMO = !FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.indexOf('INDSÆT') === 0 ||
+  /^(localhost|127\.0\.0\.1)$/.test(location.hostname) || /[?&]demo(=|&|$)/.test(location.search);
 
 var SDK = '10.12.2';
 

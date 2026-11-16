@@ -483,14 +483,11 @@ function renderSettings() {
   }
   b += '</div>';
 
-  b += '<div class="section"><span class="label">Tablets</span><div class="list">';
-  (fam.tablets || []).forEach(function (uid, i) {
-    b += '<div class="item"><div class="grow"><b>Tablet ' + (i + 1) + '</b><span>Tilknyttet</span></div>' +
-      '<button class="iconbtn" data-a="tablet-del" data-v="' + esc(uid) + '" aria-label="Fjern tablet" style="color:var(--danger)">' + icon('trash', 18, 2) + '</button></div>';
-  });
-  b += '<form class="item" id="tabletform" style="gap:8px"><label for="tabletcode" class="sr">Kode fra tabletten</label><input id="tabletcode" class="input" autocapitalize="characters" autocomplete="off" style="border:0;padding:0;height:44px;text-transform:uppercase;letter-spacing:.1em" placeholder="Kode fra tavlen">' +
-    '<button class="btn" type="submit" style="min-height:36px;padding:0 12px;font-size:14px">Tilknyt</button></form></div>' +
-    '<span class="hint">Åbn ' + esc(location.origin + location.pathname.replace(/index\.html$/, '')) + 'tablet.html på tabletten – den viser en kode, som du skriver her.</span></div>';
+  var tabUrl = location.origin + location.pathname.replace(/index\.html$/, '') + 'tablet.html';
+  b += '<div class="section"><span class="label">Tavlen på tabletten</span><div class="card">' +
+    '<b>Sådan sætter du tabletten op</b>' +
+    '<span class="hint">1. Åbn <b>' + esc(tabUrl) + '</b> i Safari på iPad\'en.<br>2. Del › Føj til hjemmeskærm, og åbn Familio derfra.<br>3. Log ind med din Google-konto én gang – så viser den jeres familie.</span>' +
+    '<button class="btn secondary" data-a="invite-copy" data-v="' + esc(tabUrl) + '">' + icon('copy', 16, 2) + 'Kopiér adressen</button></div></div>';
 
   var st = fam.settings || {};
   b += '<div class="section"><span class="label">Tavlen</span><div class="card" style="padding:4px 16px">' +

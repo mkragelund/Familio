@@ -46,6 +46,10 @@ function boot() {
   }).catch(showFatal);
   document.addEventListener('click', onClick);
   document.addEventListener('touchstart', onActivity, { passive: true });
+  // iOS låser kun lyden op ved slutningen af et tryk
+  var unlock = function () { unlockAudio(S.family && S.family.settings); };
+  document.addEventListener('touchend', unlock, { passive: true });
+  document.addEventListener('click', unlock);
   document.addEventListener('mousedown', onActivity);
   setInterval(tick, 20000);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) { tick(); requestWake(); } });
@@ -95,7 +99,6 @@ function isSaver() {
   return !!S.family && m > 0 && !isNight() && Date.now() - lastActive > m * 60000;
 }
 function onActivity() {
-  unlockAudio();
   var wasDim = S.dimShown;
   lastActive = Date.now();
   if (wasDim) {
@@ -134,6 +137,9 @@ function watchFamily() {
   stopData();
   famUnsub = store.watchDoc(F(''), function (fam) {
     var first = !S.family;
+    var t = fam && fam.settings && fam.settings.soundTest;
+    if (t && S.lastSoundTest !== undefined && t !== S.lastSoundTest && Date.now() - t < 60000) { play('done', fam.settings, false, true); }
+    S.lastSoundTest = t || 0;
     S.family = fam; S.paired = !!fam; S.famError = null;
     if (fam && first) { subscribeData(); }
     if (!fam) { requestPairing(); }

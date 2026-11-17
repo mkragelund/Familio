@@ -520,7 +520,9 @@ function renderSettings() {
     '<div class="toggle"><span class="grow"><b>Lydstyrke</b></span><label class="sr" for="s-vol">Lydstyrke</label><select class="input" id="s-vol" data-set="sound.vol" style="width:140px;height:44px">' +
     [['lav', 'Lav'], ['mellem', 'Mellem'], ['hoej', 'Høj']].map(function (o) { return '<option value="' + o[0] + '"' + ((so.vol || 'lav') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
     '<div class="row2" style="padding:10px 0 12px"><div class="field"><label for="s-qf">Stille fra</label><input class="input" id="s-qf" type="time" data-set="sound.quietFrom" value="' + esc(so.quietFrom || '20:00') + '"></div>' +
-    '<div class="field"><label for="s-qt">Stille til</label><input class="input" id="s-qt" type="time" data-set="sound.quietTo" value="' + esc(so.quietTo || '07:00') + '"></div></div></div></div>';
+    '<div class="field"><label for="s-qt">Stille til</label><input class="input" id="s-qt" type="time" data-set="sound.quietTo" value="' + esc(so.quietTo || '07:00') + '"></div></div>' +
+    '<div style="padding-bottom:12px"><button class="btn secondary block" data-a="sound-test">Afspil testlyd på tavlen</button>' +
+    '<span class="hint">Spiller også i stilletiden. Har ingen rørt tavlen siden den blev åbnet, så tryk én gang på den først.</span></div></div></div>';
 
   b += '<div class="section"><span class="label">Chauffører</span><div class="chips">';
   (fam.drivers || []).forEach(function (d) {
@@ -667,6 +669,7 @@ function onClick(e) {
     case 'bonus':
       S.form = { kid: el.getAttribute('data-kid'), pts: 10, reason: BONUS_REASONS[0], custom: '', err: '' };
       S.sheet = { kind: 'bonus' }; render(); break;
+    case 'sound-test': fs.update('', { 'settings.soundTest': Date.now() }).then(function () { toast('Testlyd sendt til tavlen'); }).catch(fail); break;
     case 'b-kid': f.kid = v; render(); break;
     case 'b-pts': f.pts = +v; render(); break;
     case 'b-reason': f.reason = v; f.custom = ''; render(); break;

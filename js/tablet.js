@@ -8,7 +8,10 @@ import {
 import { esc, pal, icon, logo, avatar, confettiHtml, pick, autoUpdate, justUpdated, toast } from './ui.js';
 import { APP_VERSION } from './config.js';
 import { play, unlockAudio } from './sound.js';
+import { weatherLoc, getWeather, dayWeather, wxIcon, wxText, deg, dayBadge } from './weather.js';
 function sfx(name) { play(name, S.family && S.family.settings, S.dimShown); }
+// Vejrudsigten for familiens sted (null hvis intet sted er valgt). Ny udsigt → tegn igen.
+function wx() { return getWeather(weatherLoc(S.family), function () { render(); }); }
 
 var store;
 var S = {
@@ -196,6 +199,7 @@ function tick() {
     render();
     return;
   }
+  wx();
   var dim = isNight() || isSaver();
   if (dim || dim !== S.dimShown) { render(); }
 }
@@ -285,7 +289,7 @@ function renderHead(mon) {
   var h = '<header class="tb-head"><div class="tb-brand">' + logo(52) + '<div>' +
     '<div class="name"><b>Familio</b><span>· ' + esc((S.family.name || '').toUpperCase()) + '</span><em class="ver">v' + esc(APP_VERSION) + '</em></div>' +
     '<div class="tb-week"><span class="w">Uge ' + isoWeek(mon) + '</span><span class="r">' + esc(weekRangeLabel(mon)) + '</span></div>' +
-    '</div></div><div class="tb-kids">';
+    '</div></div>' + renderTodayWx() + '<div class="tb-kids">';
   var mName = MONTHS_SHORT[parseYmd(S.day).getMonth()];
   kids().forEach(function (k) {
     var p = pal(k), pt = points(k.id), g = goals(k.id);
@@ -296,6 +300,19 @@ function renderHead(mon) {
   });
   return h + '</div></header>';
 }
+
+function renderTodayWx() {
+  var data = wx(), w = dayWeather(data, S.day);
+  if (!w) { return '<div class="tb-wx empty"></div>'; }
+  var c = data.cur || {};
+  var code = typeof c.code === 'number' ? c.code : w.code;
+  var loc = weatherLoc(S.family);
+  return '<div class="tb-wx" aria-label="Dagens vejr i ' + esc(loc.name) + '">' + wxIcon(code, 52, c.day === false) +
+    '<div class="wx-txt"><span class="label">Dagens vejr · ' + esc(loc.name) + '</span>' +
+    '<div class="wx-now"><b>' + deg(typeof c.t === 'number' ? c.t : w.max) + '</b><span>' + esc(wxText(code)) + '</span></div>' +
+    '<div class="wx-range">' + deg(w.max) + ' / ' + deg(w.min) + (typeof w.rain === 'number' ? ' · ' + rainDrop() + Math.round(w.rain) + '%' : '') + '</div></div></div>';
+}
+function rainDrop() { return '<svg width="11" height="11" viewBox="0 0 24 24" aria-label="Regnrisiko" role="img"><path fill="#2F6FDE" d="M12 2.5l5.5 7.5a7 7 0 1 1-11 0z"/></svg>'; }
 
 function choreRows() {
   // Fælles pligter: én række pr. pligt. Personlige: samles i rækker med én knap pr. barn.
@@ -341,6 +358,7 @@ function actChip(o) {
 function renderWeek(mon) {
   var rows = choreRows();
   var n = kids().length;
+  var data = wx();
   var h = '<div class="grid7">';
   weekDays(mon).forEach(function (d, i) {
     var ds = ymd(d), isToday = ds === S.day;
@@ -348,6 +366,7 @@ function renderWeek(mon) {
     h += '<section class="daycol' + (isToday ? ' today' : '') + '" aria-label="' + DAY_NAMES[i] + '">' +
       '<div class="dayhead"><div><div class="d">' + DAY_NAMES[i] + '</div><div class="dt">' + esc(shortDate(d)) + '</div></div>' +
       (isToday ? '<span class="tag-today">I DAG</span>' : '') + '</div>';
+    h += dayBadge(data, ds, 26);
     h += '<div class="meal"><span class="label">Aftensmad</span><span class="t">' + (S.meals[ds] ? esc(S.meals[ds]) : '<span class="none">Ikke planlagt</span>') + '</span></div>';
     h += '<div class="acts"><span class="label" style="font-size:10px">Aktiviteter</span>';
     if (!evs.length) { h += '<span class="none">Ingen</span>'; }
@@ -374,15 +393,16 @@ function renderDay() {
   var ds = S.selDay;
   var d = parseYmd(ds);
   var mon = mondayOf(parseYmd(S.day));
+  var data = wx();
   var h = '<div class="daytabs">';
   weekDays(mon).forEach(function (x, i) {
-    var xs = ymd(x);
-    h += '<button class="chip" data-a="day" data-date="' + xs + '" aria-pressed="' + (xs === ds) + '">' + (xs === S.day ? 'I dag' : DAY_SHORT[i] + ' ' + x.getDate() + '.') + '</button>';
+    var xs = ymd(x), xw = dayWeather(data, xs);
+    h += '<button class="chip" data-a="day" data-date="' + xs + '" aria-pressed="' + (xs === ds) + '">' + (xw ? wxIcon(xw.code, 24) : '') + (xs === S.day ? 'I dag' : DAY_SHORT[i] + ' ' + x.getDate() + '.') + '</button>';
   });
   h += '</div><div class="dayview">';
   // venstre: dato, aftensmad, program
   var evs = eventsOn(S.events, ds, { tabletOnly: true });
-  h += '<div class="dv-left"><div class="dv-date"><span class="display">' + esc(DAY_NAMES[(d.getDay() + 6) % 7]) + '</span><span>' + d.getDate() + '. ' + esc(monthName(d)) + '</span></div>' +
+  h += '<div class="dv-left"><div class="dv-date"><span class="display">' + esc(DAY_NAMES[(d.getDay() + 6) % 7]) + '</span><span>' + d.getDate() + '. ' + esc(monthName(d)) + '</span></div>' + dayWxLine(dayWeather(data, ds)) +
     '<div class="dv-meal">' + icon('food', 30, 1.8) + '<div><span class="label" style="color:var(--meal-text)">Aftensmad</span><b>' + esc(S.meals[ds] || 'Ikke planlagt') + '</b></div></div>' +
     '<div class="label">Program</div><div class="dv-prog">';
   if (!evs.length) { h += '<div class="none" style="font-size:16px;padding:8px 0">Ingen aktiviteter i dag</div>'; }
@@ -411,6 +431,12 @@ function renderDay() {
     h += '</div>';
   });
   return h + '</div></div>';
+}
+
+function dayWxLine(w) {
+  if (!w) { return ''; }
+  return '<div class="dv-wx">' + wxIcon(w.code, 34) + '<b>' + esc(wxText(w.code)) + '</b><span>' + deg(w.max) + ' / ' + deg(w.min) +
+    (typeof w.rain === 'number' ? ' · ' + rainDrop() + ' ' + Math.round(w.rain) + '% regn' : '') + '</span></div>';
 }
 
 function renderMeals(mon) {
@@ -457,12 +483,13 @@ function renderActs(mon) {
     h += '<span style="background:' + p.tint + ';color:' + p.text + '">' + esc(m.name) + '</span>';
   });
   // Dage med aktiviteter får dobbelt bredde, så huskelisterne kan læses
+  var data = wx();
   var cols = weekDays(mon).map(function (d) { return eventsOn(S.events, ymd(d), { tabletOnly: true }).length ? '1.6fr' : '1fr'; });
   h += '</div><div class="grid7" style="height:auto;flex:1;min-height:0;grid-template-columns:' + cols.map(function (c) { return 'minmax(0,' + c + ')'; }).join(' ') + '">';
   weekDays(mon).forEach(function (d, i) {
     var ds = ymd(d);
     var evs = eventsOn(S.events, ds, { tabletOnly: true });
-    h += '<section class="daycol' + (ds === S.day ? ' today' : '') + '"><div><div class="dayhead"><div><div class="d" style="font-size:20px">' + DAY_NAMES[i] + '</div><div class="dt">' + esc(shortDate(d)) + '</div></div></div></div>';
+    h += '<section class="daycol' + (ds === S.day ? ' today' : '') + '"><div><div class="dayhead"><div><div class="d" style="font-size:20px">' + DAY_NAMES[i] + '</div><div class="dt">' + esc(shortDate(d)) + '</div></div></div>' + dayBadge(data, ds, 26) + '</div>';
     if (!evs.length) { h += '<span class="none" style="font-size:14px">Ingen aktiviteter</span>'; }
     evs.forEach(function (o) {
       var m = memberById(S.family, o.ev.who), p = pal(m);
@@ -508,8 +535,16 @@ function renderSaver() {
   return '<button class="saver" data-a="wake" aria-label="Tryk for at vække skærmen"><div style="transform:translate(' + dx + 'vw,' + dy + 'vh);display:flex;flex-direction:column;align-items:center;gap:10px">' +
     '<div class="clock">' + pad(now.getHours()) + '.' + pad(now.getMinutes()) + '</div>' +
     '<div class="sub">' + esc(DAY_NAMES[(now.getDay() + 6) % 7]) + ' ' + now.getDate() + '. ' + esc(monthName(now)) + '</div>' +
+    saverWx() +
     (next ? '<div class="sub" style="font-size:18px">Næste: ' + esc(memberById(S.family, next.ev.who).name + ' · ' + next.ev.title + ' ' + timeLabel(next.ev)) + '</div>' : '') +
     '<div class="hintn">Tryk for at vække</div></div></button>';
+}
+
+function saverWx() {
+  var data = wx(), w = dayWeather(data, S.day);
+  if (!w) { return ''; }
+  var c = data.cur || {}, code = typeof c.code === 'number' ? c.code : w.code;
+  return '<div class="saver-wx">' + wxIcon(code, 44, c.day === false) + '<b>' + deg(typeof c.t === 'number' ? c.t : w.max) + '</b><span>' + esc(wxText(code)) + ' · ' + deg(w.max) + ' / ' + deg(w.min) + '</span></div>';
 }
 
 function renderNight() {
@@ -526,6 +561,8 @@ function renderNight() {
     var m = memberById(S.family, o.ev.who);
     h += '<div class="row"><span>' + esc(m.name) + ' · ' + esc(o.ev.title) + '</span><span>' + esc(timeLabel(o.ev)) + (o.driver ? ' · ' + esc(o.driver) + ' kører' : '') + '</span></div>';
   });
+  var tw = dayWeather(wx(), ts);
+  if (tw) { h += '<div class="row"><span>Vejret</span><span class="nwx">' + wxIcon(tw.code, 26) + esc(wxText(tw.code)) + ' · ' + deg(tw.max) + ' / ' + deg(tw.min) + '</span></div>'; }
   h += '<div class="row"><span>Aftensmad</span><span>' + esc(S.meals[ts] || 'Ikke planlagt') + '</span></div></div>' +
     '<span class="hintn">Nattilstand ' + esc(((S.family.settings || {}).nightFrom || '21:00').replace(':', '.')) + '–' + esc(((S.family.settings || {}).nightTo || '06:00').replace(':', '.')) + ' · tryk for at vække skærmen</span></button>';
   return h;

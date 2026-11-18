@@ -895,7 +895,7 @@ function renderBonus() {
   var f = S.form;
   var kids = kidsOf(S.family).map(function (k) { return [k.id, k.name]; });
   var b = '<div class="field"><span class="label">Til</span><div class="chips">' + chipsHtml(kids, 'b-kid', f.kid) + '</div></div>' +
-    '<div class="field"><span class="label">Point</span><div class="chips">' + chipsHtml([['5', '+5'], ['10', '+10'], ['20', '+20']], 'b-pts', String(f.pts)) + '</div></div>' +
+    '<div class="field"><span class="label">Point</span><div class="chips pts6">' + chipsHtml([['5', '+5'], ['10', '+10'], ['15', '+15'], ['20', '+20'], ['25', '+25'], ['30', '+30']], 'b-pts', String(f.pts)) + '</div></div>' +
     '<div class="field"><span class="label">Hvorfor</span><div class="chips">' + chipsHtml(BONUS_REASONS.map(function (r) { return [r, r]; }), 'b-reason', f.reason) + '</div>' +
     '<label class="sr" for="b-custom">Egen grund</label><input class="input" id="b-custom" placeholder="Eller skriv din egen grund"></div>' +
     '<p class="hint">Bonussen vises med det samme som en fejring på tavlen.</p>';

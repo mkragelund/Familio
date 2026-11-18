@@ -130,6 +130,7 @@ DemoStore.prototype.seed = function () {
   fam.parents.push('demo-mor'); fam.parentNames['demo-mor'] = 'Mor';
   fam.tablets = ['demo-tablet'];
   fam.drivers = ['Mor', 'Far', 'Bedstefar'];
+  fam.members[0].color = 'navy'; fam.members[1].color = 'rose';
   fam.occasions = [
     { id: 'bd-jc', type: 'birthday', title: '', date: '2016-01-06', yearly: true, who: jc, lead: 30 },
     { id: 'bd-ida', type: 'birthday', title: '', date: '2019-01-16', yearly: true, who: ida, lead: 30 },

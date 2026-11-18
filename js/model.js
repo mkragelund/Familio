@@ -209,7 +209,7 @@ export function adultMember(uid, name, family) {
 export function memberById(family, id) {
   var ms = (family && family.members) || [];
   for (var i = 0; i < ms.length; i++) { if (ms[i].id === id) { return ms[i]; } }
-  if (id === 'fam') { return { id: 'fam', name: 'Hele familien', short: 'Alle', color: 'gray', kind: 'all' }; }
+  if (id === 'fam') { return { id: 'fam', name: 'Hele familien', short: 'Alle', color: (family && family.settings && family.settings.famColor) || 'gray', kind: 'all' }; }
   return { id: id, name: id, short: id, color: 'gray' };
 }
 

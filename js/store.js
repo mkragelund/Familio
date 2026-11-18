@@ -138,6 +138,10 @@ DemoStore.prototype.seed = function () {
     { id: 'fest', type: 'party', title: 'Julefrokost hos mormor', date: '2026-12-27', yearly: false, who: '', lead: 21 },
     { id: 'cirkus', type: 'other', icon: '🎡', title: 'Tivoli', date: '2026-12-28', yearly: false, who: '', lead: 21 }
   ];
+  fam.reminders = [
+    { id: 'rem-oejen', text: 'Øjenklap på', icon: '👁️', time: '16:00', who: ida, chore: 'oejen', type: 'rec', freq: 'd', days: [], start: '2026-01-01', end: '' },
+    { id: 'rem-skrald', text: 'Skraldespanden skal ud', icon: '🗑️', time: '18:30', who: '', chore: '', type: 'rec', freq: 'w1', days: [3], start: '2026-01-01', end: '' }
+  ];
   fam.settings.weather = { name: 'Holte', area: 'Rudersdal, Region Hovedstaden', lat: 55.8157, lon: 12.4718 };
   fam.chores.push({ id: 'laes', label: 'Læse 15 min', pts: 10, kids: [jc], icon: 'laes' });
   fam.chores.push({ id: 'oejen', label: 'Øjenklap', pts: 10, kids: [ida], icon: 'oejen' });

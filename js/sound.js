@@ -16,6 +16,8 @@ var DEF = {
   undo: [[523, 0, 0.1, 'tri', 0.7], [392, 0.07, 0.15, 'tri', 0.7]],
   // Fødselsdag: første linje af "I dag er det …"-melodien (fri), blødt
   party: [[392, 0, 0.2, 'tri', 0.9], [392, 0.24, 0.12, 'tri', 0.9], [440, 0.4, 0.32, 'tri', 0.9], [392, 0.76, 0.32, 'tri', 0.9], [523, 1.12, 0.32, 'tri', 0.9], [494, 1.48, 0.6, 'tri', 0.9], [1047, 1.48, 0.5, 'sine', 0.25]],
+  // Påmindelse: venlig dobbelt-klokke (spilles to gange)
+  remind: [[880, 0, 0.35, 'sine', 0.9], [1175, 0.2, 0.5, 'sine', 0.9], [880, 0.9, 0.35, 'sine', 0.9], [1175, 1.1, 0.6, 'sine', 0.9]],
   // Jul og advent: små klokker
   jingle: [[1319, 0, 0.5, 'sine', 0.7], [1568, 0.18, 0.5, 'sine', 0.7], [1760, 0.36, 0.5, 'sine', 0.6], [2093, 0.54, 0.9, 'sine', 0.6], [1047, 0.54, 0.9, 'sine', 0.3]]
 };

@@ -53,6 +53,7 @@ export function occursOn(ev, dateStr) {
   if (!ev.start || dateStr < ev.start) { return false; }
   if (ev.end && dateStr > ev.end) { return false; }
   var d = parseYmd(dateStr);
+  if (ev.freq === 'd') { return true; }
   if (ev.freq === 'm1') {
     return parseYmd(ev.start).getDate() === d.getDate();
   }
@@ -105,6 +106,7 @@ export function recurrenceLabel(ev) {
     if (ev.endDate && ev.endDate > ev.date) { return 'Én gang · ' + shortDate(parseYmd(ev.date)) + ' – ' + shortDate(parseYmd(ev.endDate)); }
     return 'Én gang';
   }
+  if (ev.freq === 'd') { return 'Hver dag'; }
   var f = ev.freq === 'w2' ? 'Hver 2. uge' : ev.freq === 'm1' ? 'Hver måned' : 'Hver uge';
   if (ev.freq === 'm1') { return f + ' d. ' + parseYmd(ev.start).getDate() + '.'; }
   if (ev.freq === 'mw') { return nthLabel(ev.nth) + ' ' + DAY_NAMES[((ev.days || [7])[0]) - 1].toLowerCase() + ' i hver måned'; }

@@ -427,3 +427,9 @@ html.dark, html.dark body { background: #000; }
 .iconpick { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
 .iconpick .ip { height: 40px; border-radius: 10px; border: 2px solid var(--border); background: #fff; font-size: 22px; padding: 0; }
 .iconpick .ip[aria-pressed="true"] { border-color: var(--ink); background: #F4F1EA; }
+.cele.remind { gap: 10px; }
+.cele.remind .rm-top { display: flex; align-items: center; gap: 8px; }
+.cele.remind .bell { font-size: 22px; display: inline-block; animation: ring 1.2s ease-in-out 3; transform-origin: 50% 10%; }
+@keyframes ring { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(18deg); } 30% { transform: rotate(-16deg); } 45% { transform: rotate(10deg); } 60% { transform: rotate(-8deg); } 75% { transform: rotate(4deg); } }
+.cele.remind .big-e { font-size: 72px; line-height: 1; animation: pop .5s ease-out; }
+.cele.remind .h { font-size: 40px; }

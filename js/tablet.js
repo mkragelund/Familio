@@ -3,7 +3,7 @@ import { createStore, DEMO } from './store.js';
 import {
   ymd, parseYmd, today, addDays, mondayOf, weekDays, isoWeek, weekRangeLabel, DAY_NAMES, DAY_SHORT,
   eventsOn, timeLabel, sumPoints, periodBounds, completionId, packedId, memberById, kidsOf, inNight,
-  shortDate, monthName, MONTHS_SHORT, pad, randomCode
+  shortDate, monthName, MONTHS_SHORT, pad, randomCode, occursOn
 } from './model.js';
 import { esc, pal, icon, logo, avatar, confettiHtml, pick, autoUpdate, justUpdated, toast } from './ui.js';
 import { APP_VERSION } from './config.js';
@@ -201,6 +201,7 @@ function tick() {
     return;
   }
   wx();
+  checkReminders();
   var dim = isNight() || isSaver();
   if (dim || dim !== S.dimShown) { render(); }
 }
@@ -477,6 +478,42 @@ function occPills(ds) {
   }).join('');
 }
 
+// ---------- Påmindelser: kun en popup med lyd på klokkeslættet ----------
+var remSnooze = {};
+function remKey(r) { return 'familio-rem-' + S.day + '-' + r.id; }
+function dueReminders() {
+  var now = new Date(), hm = pad(now.getHours()) + ':' + pad(now.getMinutes());
+  return ((S.family && S.family.reminders) || []).filter(function (r) {
+    if (!r || !r.time || !occursOn(r, S.day)) { return false; }
+    if (r.time > hm) { return false; }
+    // ikke ældre end 3 timer (fx hvis tavlen var slukket)
+    var p = r.time.split(':'), t = new Date(now); t.setHours(+p[0], +p[1], 0, 0);
+    if (now - t > 3 * 3600000) { return false; }
+    if (remSnooze[r.id] && Date.now() < remSnooze[r.id]) { return false; }
+    if (r.chore && r.who && isDone(S.day, r.chore, r.who)) { return false; }
+    try { return !localStorage.getItem(remKey(r)); } catch (e) { return false; }
+  });
+}
+function checkReminders() {
+  if (!S.family || S.cele || S.panel) { return; }
+  var r = dueReminders()[0];
+  if (!r) { return; }
+  // væk skærmen fra pause/nat, så beskeden kan ses
+  lastActive = Date.now();
+  if (isNight()) { S.wakeUntil = Date.now() + 3 * 60 * 1000; }
+  requestWake();
+  S.cele = { remind: true, key: r.id, r: r };
+  render();
+  renderCele();
+  play('remind', S.family && S.family.settings, false);
+}
+function remDone(r, choreToo) {
+  try { localStorage.setItem(remKey(r), '1'); } catch (e) { /* */ }
+  S.cele = null; renderCele();
+  if (choreToo && r.chore && r.who && !isDone(S.day, r.chore, r.who)) { toggleChore(S.day, r.chore, r.who); }
+  setTimeout(checkReminders, 600);
+}
+
 // Fejring på selve dagen: vises én gang pr. mærkedag, første gang tavlen er vågen den dag
 var partyQueue = [];
 function partyKey(o) { return 'familio-party-' + o.key; }
@@ -651,6 +688,20 @@ function renderNight() {
 function renderCele() {
   var c = S.cele;
   if (!c) { overlay.innerHTML = ''; return; }
+  if (c.remind) {
+    var r = c.r, rk = r.who ? memberById(S.family, r.who) : null, rp = rk ? pal(rk) : null;
+    var ch = r.chore && rk ? chores().filter(function (x) { return x.id === r.chore; })[0] : null;
+    overlay.innerHTML = '<div class="overlay">' +
+      '<div class="cele remind" role="alertdialog" aria-live="assertive" aria-label="Påmindelse: ' + esc(r.text) + '">' +
+      '<div class="rm-top"><span class="bell">🔔</span><span class="label">Påmindelse · kl. ' + esc(r.time.replace(':', '.')) + '</span></div>' +
+      '<div class="big-e">' + esc(r.icon || '🔔') + '</div>' + (rk ? avatar(rk, 56) : '') +
+      '<div class="h"' + (rp ? ' style="color:' + rp.text + '"' : '') + '>' + esc(r.text) + '</div>' +
+      (rk ? '<div class="b">' + esc(rk.name) + '</div>' : '') +
+      '<div class="btns">' + '<button class="btn secondary" data-a="rem-snooze">Om 10 min</button>' +
+      (ch ? '<button class="btn" style="background:' + rp.color + '" data-a="rem-chore">✓ Klaret (+' + ch.pts + ' p)</button>' : '<button class="btn" style="background:' + (rp ? rp.color : 'var(--ink)') + '" data-a="rem-ok">✓ OK</button>') +
+      '</div></div></div>';
+    return;
+  }
   if (c.party) {
     var pk = c.kid ? memberById(S.family, c.kid) : null, pp = pk ? pal(pk) : null;
     overlay.innerHTML = '<div class="overlay">' + confettiHtml(90) + (c.kind === 'jul' || c.kind === 'advent' ? snowHtml() : '') +
@@ -847,6 +898,9 @@ function onClick(e) {
     if (S.cele && !S.cele.bonus) { store.del(F('completions/' + S.cele.key)).catch(report); }
     S.cele = null; renderCele();
   }
+  else if (a === 'rem-ok' && S.cele && S.cele.remind) { remDone(S.cele.r, false); }
+  else if (a === 'rem-chore' && S.cele && S.cele.remind) { remDone(S.cele.r, true); }
+  else if (a === 'rem-snooze' && S.cele && S.cele.remind) { remSnooze[S.cele.r.id] = Date.now() + 10 * 60 * 1000; S.cele = null; renderCele(); }
   else if (a === 'close') { var wasParty = S.cele && S.cele.party; S.cele = null; renderCele(); if (wasParty) { setTimeout(nextParty, 400); } }
   else if (a === 'wake') {
     if (isNight()) { S.wakeUntil = Date.now() + 3 * 60 * 1000; setTimeout(render, 3 * 60 * 1000 + 500); }

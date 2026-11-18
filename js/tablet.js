@@ -256,9 +256,17 @@ function render() {
   else if (isSaver()) { html += renderSaver(); }
   S.dimShown = isNight() || isSaver();
   document.documentElement.classList.toggle('dark', S.dimShown);
+  setThemeColor(S.nightShown ? '#0B0D12' : S.dimShown ? '#000000' : '#1F2430');
   if (S.dimShown) { releaseWake(); }
   app.innerHTML = html;
   renderPanel();
+}
+
+// iOS farver statuslinjen (ur, wifi, batteri) efter theme-color. I nat/pauseskærm gøres den sort,
+// så den ikke lyser som en blå stribe øverst. Selve statuslinjen kan iPadOS ikke skjule.
+var themeMeta = document.querySelector('meta[name="theme-color"]');
+function setThemeColor(c) {
+  if (themeMeta && themeMeta.getAttribute('content') !== c) { themeMeta.setAttribute('content', c); }
 }
 
 function renderPairing() {

@@ -294,7 +294,8 @@ a { color: #1F4FA8; }
 
 /* Tablet: mørk statuslinje øverst (iOS viser hvid tekst), og helt mørkt i nat/pauseskærm */
 .tb::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: #1F2430; z-index: 40; }
-html.dark, html.dark body { background: #0B0D12; }
+html.dark .tb::before { background: #000; }
+html.dark, html.dark body { background: #000; }
 .night, .saver { padding-top: calc(40px + env(safe-area-inset-top)); padding-bottom: calc(40px + env(safe-area-inset-bottom)); }
 .saver { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; color: #8A90A2; z-index: 60; display: flex; align-items: center; justify-content: center; border: 0; width: 100%; font-family: inherit; }
 .saver .clock { font-family: var(--display); font-weight: 500; font-size: 96px; line-height: 1; color: #6B7080; }

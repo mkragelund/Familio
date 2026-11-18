@@ -130,6 +130,11 @@ DemoStore.prototype.seed = function () {
   fam.parents.push('demo-mor'); fam.parentNames['demo-mor'] = 'Mor';
   fam.tablets = ['demo-tablet'];
   fam.drivers = ['Mor', 'Far', 'Bedstefar'];
+  fam.occasions = [
+    { id: 'bd-jc', type: 'birthday', title: '', date: '2016-01-06', yearly: true, who: jc, lead: 30 },
+    { id: 'bd-ida', type: 'birthday', title: '', date: '2019-01-16', yearly: true, who: ida, lead: 30 },
+    { id: 'ski', type: 'trip', title: 'Skiferie i Norge', date: '2027-02-13', yearly: false, who: '', lead: 45 }
+  ];
   fam.settings.weather = { name: 'Holte', area: 'Rudersdal, Region Hovedstaden', lat: 55.8157, lon: 12.4718 };
   fam.chores.push({ id: 'laes', label: 'Læse 15 min', pts: 10, kids: [jc], icon: 'laes' });
   fam.chores.push({ id: 'oejen', label: 'Øjenklap', pts: 10, kids: [ida], icon: 'oejen' });

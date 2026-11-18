@@ -7,6 +7,7 @@ import {
   monthName, seedFamily, newId, dow, nthOf, nthLabel, familyIdNew, randomCode, formatCode, cleanCode, adultMember, KID_COLORS, initials
 } from './model.js';
 import { esc, pal, icon, logo, avatar, toast, autoUpdate, justUpdated } from './ui.js';
+import { HOLIDAYS, TYPES, holidaySettings, upcoming, todays } from './occasions.js';
 import { weatherLoc, getWeather, searchPlaces, dayBadge } from './weather.js';
 
 var store;
@@ -245,6 +246,7 @@ function renderWeek() {
     var evs = eventsOn(S.events, ds);
     h += '<div class="card' + (ds === td ? ' today' : '') + '"><div class="card-head"><b>' + DAY_NAMES[i] + ' <span>' + esc(shortDate(d)) + '</span></b>' + dayBadge(data, ds, 26) +
       '<button class="iconbtn" data-a="new-ev" data-date="' + ds + '" aria-label="Tilføj aktivitet ' + DAY_NAMES[i] + '" style="margin:-10px -8px -10px 0">' + icon('plus', 20, 2.2) + '</button></div>' +
+      todays(S.family, ds).map(function (o) { var m = o.who ? memberById(S.family, o.who) : null; return '<span class="occ-pill ' + o.kind + '"' + (m ? ' style="background:' + pal(m).color + '"' : '') + '>' + o.emoji + ' ' + esc(o.title) + '</span>'; }).join('') +
       '<button class="mealline' + (S.meals[ds] ? '' : ' empty') + '" data-a="tab" data-t="mad">' + icon('food', 16, 2) + esc(S.meals[ds] || 'Ingen aftensmad planlagt') + '</button>';
     evs.forEach(function (o) { h += evRow(o, ds); });
     h += '</div>';
@@ -363,6 +365,7 @@ function renderSheet() {
   if (s.kind === 'settings') { return renderSettings(); }
   if (s.kind === 'chore') { return renderChoreForm(); }
   if (s.kind === 'bonus') { return renderBonus(); }
+  if (s.kind === 'occ') { return renderOccForm(); }
   return '';
 }
 
@@ -476,6 +479,74 @@ function renderEventForm() {
   return sheetFrame(f.id ? 'Rediger aktivitet' : 'Ny aktivitet', b, foot, '<button class="btn ghost" data-a="close-sheet">Annuller</button>');
 }
 
+var LEADS = [3, 5, 7, 10, 14, 21, 30, 45, 60];
+function leadSelect(attr, key, cur, julStyle) {
+  var opts = julStyle ? [[23, 'Fra 1. dec.'], [14, '14 dage før'], [7, '7 dage før']] : LEADS.map(function (n) { return [n, n + ' dage før']; });
+  if (!opts.some(function (o) { return o[0] === cur; })) { opts.push([cur, cur + ' dage før']); }
+  return '<label class="sr" for="ol-' + key + '">Nedtælling starter</label><select class="input" id="ol-' + key + '" ' + attr + '="' + esc(key) + '">' +
+    opts.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>';
+}
+
+function renderOccSettings() {
+  var hs = holidaySettings(S.family);
+  var b = '<div class="section"><span class="label">Mærkedage og nedtælling</span><div class="card occ-set" style="padding:4px 16px">';
+  HOLIDAYS.forEach(function (d) {
+    var st = hs[d.key];
+    b += '<div class="row"><span class="e">' + d.emoji + '</span><span class="grow"><b>' + esc(d.title) + '</b><span>' + (d.key === 'jul' ? 'Med kalenderlys og adventskrans' : esc(d.md.slice(3) + '. ' + (d.md.slice(0, 2) === '12' ? 'december' : 'oktober'))) + '</span></span>' +
+      (st.on ? leadSelect('data-occ-lead', d.key, st.lead, d.key === 'jul') : '') +
+      '<input type="checkbox" aria-label="Vis ' + esc(d.title) + '" data-occ-on="' + d.key + '"' + (st.on ? ' checked' : '') + '></div>';
+  });
+  var td = ymd(today());
+  var mine = upcoming({ occasions: S.family.occasions || [], members: S.family.members, settings: { holidays: { jul: { on: false }, nytaar: { on: false }, halloween: { on: false } } } }, td);
+  var past = (S.family.occasions || []).filter(function (o) { return !mine.some(function (x) { return x.key.indexOf(o.id) === 0; }); });
+  b += '<div class="occ-sub">Egne mærkedage</div>';
+  mine.forEach(function (x) {
+    var o = (S.family.occasions || []).filter(function (y) { return x.key.indexOf(y.id) === 0; })[0];
+    var d = parseYmd(x.date);
+    b += '<button class="row occ-row" data-a="occ-edit" data-v="' + esc(o.id) + '"><span class="e">' + x.emoji + '</span><span class="grow"><b>' + esc(x.title) + '</b><span>' +
+      esc(d.getDate() + '. ' + monthName(d) + (o.yearly ? ' · hvert år' : ' ' + d.getFullYear()) + ' · om ' + x.days + ' dage') + '</span></span>' + icon('pencil', 18, 2) + '</button>';
+  });
+  past.forEach(function (o) {
+    b += '<button class="row occ-row" style="opacity:.6" data-a="occ-edit" data-v="' + esc(o.id) + '"><span class="e">' + (TYPES[o.type] || TYPES.other).emoji + '</span><span class="grow"><b>' + esc(o.title) + '</b><span>Overstået</span></span>' + icon('pencil', 18, 2) + '</button>';
+  });
+  b += '</div><button class="btn dashed" data-a="occ-new">+ Tilføj mærkedag</button>' +
+    '<span class="hint">Fødselsdage, ferier og andre dage tæller ned på tavlen. På selve dagen er der konfetti og lyd.</span></div>';
+  return b;
+}
+
+function renderOccForm() {
+  var f = S.form;
+  var bday = f.type === 'birthday';
+  var b = '<div class="field"><span class="label">Hvad er det</span><div class="chips">';
+  Object.keys(TYPES).forEach(function (k) {
+    b += '<button class="chip" data-a="o-type" data-v="' + k + '" aria-pressed="' + (f.type === k) + '">' + TYPES[k].emoji + ' ' + TYPES[k].label + '</button>';
+  });
+  b += '</div></div><div class="field"><span class="label">' + (bday ? 'Hvis fødselsdag' : 'Hvem (valgfrit)') + '</span><div class="chips">';
+  (S.family.members || []).forEach(function (m) {
+    b += '<button class="chip" data-a="o-who" data-v="' + esc(m.id) + '" aria-pressed="' + (f.who === m.id) + '">' + esc(m.name) + '</button>';
+  });
+  b += '</div></div>';
+  b += '<div class="field"><label for="o-title">' + (bday ? 'Navn (hvis det ikke er en fra familien)' : 'Navn') + '</label><input class="input" id="o-title" data-f="title" value="' + esc(f.title) + '" placeholder="' + (bday ? 'fx Mormor' : 'fx Skiferie i Norge') + '"></div>';
+  b += '<div class="field"><label for="o-date">' + (bday ? 'Fødselsdato' : 'Dato') + '</label><input class="input" id="o-date" type="date" data-f="date" value="' + esc(f.date) + '"></div>';
+  if (!bday) { b += '<label class="toggle"><span class="grow"><b>Gentages hvert år</b></span><input type="checkbox" data-fc="yearly"' + (f.yearly ? ' checked' : '') + '></label>'; }
+  b += '<div class="field"><label for="ol-form">Nedtællingen starter</label>' + leadSelect('data-f', 'lead', +f.lead, false).replace('id="ol-lead"', 'id="ol-form"') + '</div>';
+  if (f.err) { b += '<div class="err" role="alert">' + esc(f.err) + '</div>'; }
+  var foot = '<div style="display:flex;flex-direction:column;gap:8px"><button class="btn block" style="height:54px" data-a="o-save">Gem mærkedag</button>' +
+    (f.id ? '<button class="btn danger" data-a="o-del">Slet mærkedagen</button>' : '') + '</div>';
+  return sheetFrame(f.id ? 'Rediger mærkedag' : 'Ny mærkedag', b, foot, '<button class="btn ghost" data-a="occ-back">Tilbage</button>');
+}
+
+function saveOcc() {
+  var f = S.form;
+  var bday = f.type === 'birthday';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date || '')) { f.err = 'Vælg en dato.'; render(); return; }
+  if (bday && !f.who && !f.title.trim()) { f.err = 'Vælg hvem der har fødselsdag, eller skriv et navn.'; render(); return; }
+  if (!bday && !f.title.trim()) { f.err = 'Giv mærkedagen et navn.'; render(); return; }
+  var o = { id: f.id || newId(), type: f.type, title: f.title.trim(), date: f.date, yearly: bday ? true : !!f.yearly, who: f.who || '', lead: +f.lead || 30 };
+  var list = (S.family.occasions || []).filter(function (x) { return x.id !== o.id; }).concat([o]);
+  fs.update('', { occasions: list }).then(function () { toast('Gemt'); S.form = null; S.sheet = { kind: 'settings' }; render(); }).catch(fail);
+}
+
 function renderWxSettings() {
   var loc = weatherLoc(S.family);
   var q = S.wxSearch || {};
@@ -552,6 +623,7 @@ function renderSettings() {
     '<span class="hint">Spiller også i stilletiden. Har ingen rørt tavlen siden den blev åbnet, så tryk én gang på den først.</span></div></div></div>';
 
   b += renderWxSettings();
+  b += renderOccSettings();
 
   b += '<div class="section"><span class="label">Chauffører</span><div class="chips">';
   (fam.drivers || []).forEach(function (d) {
@@ -648,6 +720,15 @@ function onChange(e) {
     fs.update('', upd).then(function () { toast('Gemt'); }).catch(fail);
     return;
   }
+  if (t.hasAttribute('data-occ-on') || t.hasAttribute('data-occ-lead')) {
+    var hk = t.getAttribute('data-occ-on') || t.getAttribute('data-occ-lead');
+    var hu = {};
+    if (t.hasAttribute('data-occ-on')) { hu['settings.holidays.' + hk + '.on'] = t.checked; }
+    else { hu['settings.holidays.' + hk + '.lead'] = +t.value; }
+    fs.update('', hu).then(function () { toast('Gemt'); }).catch(fail);
+    return;
+  }
+  if (t.hasAttribute('data-f') && S.form && t.tagName === 'SELECT') { S.form[t.getAttribute('data-f')] = t.value; return; }
   if (t.hasAttribute('data-setb')) {
     var ub = {}; ub['settings.' + t.getAttribute('data-setb')] = t.checked;
     fs.update('', ub).then(function () { toast(t.checked ? 'Lyd slået til' : 'Lyd slået fra'); }).catch(fail);
@@ -780,6 +861,20 @@ function onClick(e) {
     case 'c-kid': var ki = f.kids.indexOf(v); if (ki >= 0) { f.kids.splice(ki, 1); } else { f.kids.push(v); } render(); break;
     case 'c-icon': f.icon = v; render(); break;
     case 'c-save': saveChore(); break;
+    case 'occ-new': S.form = { id: '', type: 'birthday', who: '', title: '', date: '', yearly: false, lead: 30, err: '' }; S.sheet = { kind: 'occ' }; render(); break;
+    case 'occ-edit':
+      var oe = (S.family.occasions || []).filter(function (x) { return x.id === v; })[0];
+      if (oe) { S.form = { id: oe.id, type: oe.type || 'other', who: oe.who || '', title: oe.title || '', date: oe.date, yearly: !!oe.yearly, lead: oe.lead || 30, err: '' }; S.sheet = { kind: 'occ' }; render(); }
+      break;
+    case 'occ-back': S.form = null; S.sheet = { kind: 'settings' }; render(); break;
+    case 'o-type': f.type = v; f.err = ''; render(); break;
+    case 'o-who': f.who = f.who === v ? '' : v; f.err = ''; render(); break;
+    case 'o-save': saveOcc(); break;
+    case 'o-del':
+      if (window.confirm('Slet mærkedagen?')) {
+        fs.update('', { occasions: (S.family.occasions || []).filter(function (x) { return x.id !== f.id; }) }).then(function () { S.form = null; S.sheet = { kind: 'settings' }; render(); }).catch(fail);
+      }
+      break;
     case 'c-del':
       if (window.confirm('Slet pligten "' + f.label + '"? Point, der allerede er optjent, bliver stående.')) {
         var cl = (S.family.chores || []).slice(); cl.splice(f.i, 1);

@@ -8,6 +8,7 @@ import {
 import { esc, pal, icon, logo, avatar, confettiHtml, pick, autoUpdate, justUpdated, toast } from './ui.js';
 import { APP_VERSION } from './config.js';
 import { play, unlockAudio } from './sound.js';
+import { countdowns, todays, countdownText, candleDay, candleSvg, wreathSvg, adventLit, holidaySettings } from './occasions.js';
 import { weatherLoc, getWeather, dayWeather, wxIcon, wxText, deg, dayBadge } from './weather.js';
 function sfx(name) { play(name, S.family && S.family.settings, S.dimShown); }
 // Vejrudsigten for familiens sted (null hvis intet sted er valgt). Ny udsigt → tegn igen.
@@ -264,6 +265,7 @@ function render() {
   if (S.dimShown) { releaseWake(); }
   app.innerHTML = html;
   renderPanel();
+  checkParty();
 }
 
 // iOS farver statuslinjen (ur, wifi, batteri) efter theme-color. I nat/pauseskærm gøres den sort,
@@ -366,7 +368,7 @@ function renderWeek(mon) {
     h += '<section class="daycol' + (isToday ? ' today' : '') + '" aria-label="' + DAY_NAMES[i] + '">' +
       '<div class="dayhead"><div><div class="d">' + DAY_NAMES[i] + '</div><div class="dt">' + esc(shortDate(d)) + '</div></div>' +
       (isToday ? '<span class="tag-today">I DAG</span>' : '') + '</div>';
-    h += dayBadge(data, ds, 26);
+    h += dayBadge(data, ds, 26) + occPills(ds);
     h += '<div class="meal"><span class="label">Aftensmad</span><span class="t">' + (S.meals[ds] ? esc(S.meals[ds]) : '<span class="none">Ikke planlagt</span>') + '</span></div>';
     h += '<div class="acts"><span class="label" style="font-size:10px">Aktiviteter</span>';
     if (!evs.length) { h += '<span class="none">Ingen</span>'; }
@@ -402,7 +404,8 @@ function renderDay() {
   h += '</div><div class="dayview">';
   // venstre: dato, aftensmad, program
   var evs = eventsOn(S.events, ds, { tabletOnly: true });
-  h += '<div class="dv-left"><div class="dv-date"><span class="display">' + esc(DAY_NAMES[(d.getDay() + 6) % 7]) + '</span><span>' + d.getDate() + '. ' + esc(monthName(d)) + '</span></div>' + dayWxLine(dayWeather(data, ds)) +
+  var cdx = candleDay(ds);
+  h += '<div class="dv-left' + (cdx ? ' has-xmas' : '') + '"><div class="dv-main"><div class="dv-date"><span class="display">' + esc(DAY_NAMES[(d.getDay() + 6) % 7]) + '</span><span>' + d.getDate() + '. ' + esc(monthName(d)) + '</span></div>' + occBanner(ds) + dayWxLine(dayWeather(data, ds)) +
     '<div class="dv-meal">' + icon('food', 30, 1.8) + '<div><span class="label" style="color:var(--meal-text)">Aftensmad</span><b>' + esc(S.meals[ds] || 'Ikke planlagt') + '</b></div></div>' +
     '<div class="label">Program</div><div class="dv-prog">';
   if (!evs.length) { h += '<div class="none" style="font-size:16px;padding:8px 0">Ingen aktiviteter i dag</div>'; }
@@ -415,7 +418,7 @@ function renderDay() {
       (pack.length && !x ? '<button class="packopen" style="width:auto;color:' + p.text + '" data-a="packopen" data-date="' + ds + '" data-ev="' + esc(o.ev.id) + '">' + icon(nP === pack.length ? 'check' : 'bag', 18, 2.2) + (nP === pack.length ? 'Pakket' : 'Pak ' + nP + '/' + pack.length) + '</button>' : '') +
       '</div>';
   });
-  h += '</div></div>';
+  h += '</div>' + festive(ds) + '</div>' + xmasStrip(ds) + '</div>';
   // højre: pligter pr. barn
   h += '<div class="dv-right" style="grid-template-columns:repeat(' + Math.max(1, kids().length) + ',minmax(0,1fr))">';
   kids().forEach(function (k) {
@@ -431,6 +434,76 @@ function renderDay() {
     h += '</div>';
   });
   return h + '</div></div>';
+}
+
+// ---------- Mærkedage ----------
+function occBanner(ds) {
+  var l = todays(S.family, ds);
+  if (!l.length) { return ''; }
+  return l.map(function (o) {
+    var m = o.who ? memberById(S.family, o.who) : null, p = m ? pal(m) : null;
+    var txt = o.kind === 'birthday' ? 'Tillykke, ' + o.name + '! ' + (o.age ? o.age + ' år i dag' : '') : o.kind === 'jul' ? 'Glædelig jul!' : o.kind === 'nytaar' ? 'Godt nytår!' : o.kind === 'advent' ? o.title + ' – tænd ' + ['et', 'to', 'tre', 'fire'][o.advent - 1] + ' lys' : o.title + ' i dag!';
+    return '<div class="occ-banner ' + o.kind + '"' + (p ? ' style="background:' + p.color + '"' : '') + '><span class="e">' + o.emoji + '</span><b>' + esc(txt) + '</b></div>';
+  }).join('');
+}
+
+function festive(ds) {
+  var list = countdowns(S.family, ds);
+  if (candleDay(ds)) { list = list.filter(function (o) { return o.kind !== 'jul'; }); }
+  if (!list.length) { return ''; }
+  var h = '<div class="festive"><div class="occ-list">';
+  list.slice(0, 3).forEach(function (o) {
+    var m = o.who ? memberById(S.family, o.who) : null, p = m ? pal(m) : null;
+    h += '<div class="occ" style="' + (p ? 'background:' + p.tint + ';color:' + p.text : '') + '"><span class="e">' + o.emoji + '</span><b class="n">' + o.days + '</b>' +
+      '<span class="t">' + (o.days === 1 ? 'dag' : 'dage') + ' til ' + esc(o.kind === 'jul' || o.kind === 'nytaar' || o.kind === 'halloween' ? o.title.toLowerCase() : o.title) + '</span></div>';
+  });
+  return h + '</div></div>';
+}
+
+// Kalenderlys og adventskrans i højre side af I dag (1.–24. december)
+function xmasStrip(ds) {
+  var cd = candleDay(ds);
+  if (!cd || !holidaySettings(S.family).jul.on) { return ''; }
+  var left = 24 - cd, lit = adventLit(ds);
+  return '<div class="xm-strip"><span class="label">Kalenderlys</span>' + candleSvg(cd, 220) +
+    (left ? '<b class="display n">' + left + '</b><span class="t">' + (left === 1 ? 'dag' : 'dage') + ' til juleaften</span>' : '<b class="display n" style="font-size:22px">Juleaften!</b>') +
+    (lit ? wreathSvg(lit, 104) + '<span class="adv">' + lit + '. advent</span>' : '') + '</div>';
+}
+
+function occPills(ds) {
+  return todays(S.family, ds).map(function (o) {
+    var m = o.who ? memberById(S.family, o.who) : null, p = m ? pal(m) : null;
+    return '<span class="occ-pill ' + o.kind + '"' + (p ? ' style="background:' + p.color + '"' : '') + '>' + o.emoji + ' ' + esc(o.short) + '</span>';
+  }).join('');
+}
+
+// Fejring på selve dagen: vises én gang pr. mærkedag, første gang tavlen er vågen den dag
+var partyQueue = [];
+function partyKey(o) { return 'familio-party-' + o.key; }
+function checkParty() {
+  if (!S.family || S.dimShown || S.cele || S.panel) { return; }
+  var l = todays(S.family, S.day).filter(function (o) {
+    try { return !localStorage.getItem(partyKey(o)); } catch (e) { return false; }
+  });
+  if (!l.length) { return; }
+  partyQueue = l;
+  nextParty();
+}
+function nextParty() {
+  var o = partyQueue.shift();
+  if (!o) { return; }
+  try { localStorage.setItem(partyKey(o), '1'); } catch (e) { /* */ }
+  var m = o.who ? memberById(S.family, o.who) : null;
+  var c = { party: true, key: o.key, kind: o.kind, emoji: o.emoji, kid: o.who || '' };
+  if (o.kind === 'birthday') { c.head = 'Tillykke med fødselsdagen, ' + (m ? m.name : o.name) + '!'; c.body = o.age ? 'Hurra – i dag bliver du ' + o.age + ' år!' : 'Hurra for dig i dag!'; }
+  else if (o.kind === 'jul') { c.head = 'Glædelig jul!'; c.body = 'Kalenderlyset er brændt helt ned. Nu er det juleaften!'; }
+  else if (o.kind === 'nytaar') { c.head = 'Godt nytår!'; c.body = 'Farvel til ' + S.day.slice(0, 4) + ' og goddag til ' + (+S.day.slice(0, 4) + 1) + '!'; }
+  else if (o.kind === 'halloween') { c.head = 'Glædelig halloween!'; c.body = 'Slik eller ballade?'; }
+  else if (o.kind === 'advent') { c.head = o.title; c.body = 'Så skal der tændes ' + ['et', 'to', 'tre', 'fire'][o.advent - 1] + ' lys i adventskransen.'; c.advent = o.advent; }
+  else { c.head = o.title + '!'; c.body = 'Det er i dag!'; }
+  S.cele = c;
+  renderCele();
+  sfx(o.kind === 'birthday' || o.kind === 'party' || o.kind === 'other' || o.kind === 'trip' ? 'party' : 'jingle');
 }
 
 function dayWxLine(w) {
@@ -489,7 +562,7 @@ function renderActs(mon) {
   weekDays(mon).forEach(function (d, i) {
     var ds = ymd(d);
     var evs = eventsOn(S.events, ds, { tabletOnly: true });
-    h += '<section class="daycol' + (ds === S.day ? ' today' : '') + '"><div><div class="dayhead"><div><div class="d" style="font-size:20px">' + DAY_NAMES[i] + '</div><div class="dt">' + esc(shortDate(d)) + '</div></div></div>' + dayBadge(data, ds, 26) + '</div>';
+    h += '<section class="daycol' + (ds === S.day ? ' today' : '') + '"><div><div class="dayhead"><div><div class="d" style="font-size:20px">' + DAY_NAMES[i] + '</div><div class="dt">' + esc(shortDate(d)) + '</div></div></div>' + dayBadge(data, ds, 26) + occPills(ds) + '</div>';
     if (!evs.length) { h += '<span class="none" style="font-size:14px">Ingen aktiviteter</span>'; }
     evs.forEach(function (o) {
       var m = memberById(S.family, o.ev.who), p = pal(m);
@@ -532,12 +605,17 @@ function renderSaver() {
   var next = eventsOn(S.events, t, { tabletOnly: true }).filter(function (o) {
     return !o.cancelled && (o.ev.allDay || (o.ev.to || o.ev.from || '') >= pad(now.getHours()) + ':' + pad(now.getMinutes()));
   })[0];
-  return '<button class="saver" data-a="wake" aria-label="Tryk for at vække skærmen"><div style="transform:translate(' + dx + 'vw,' + dy + 'vh);display:flex;flex-direction:column;align-items:center;gap:10px">' +
+  var cd = candleDay(t), cdl = countdowns(S.family, t), tdl = todays(S.family, t);
+  var occLine = tdl.length ? tdl[0].emoji + ' ' + tdl[0].title : (cdl.length ? cdl[0].emoji + ' ' + countdownText(cdl[0]) : '');
+  return '<button class="saver" data-a="wake" aria-label="Tryk for at vække skærmen"><div style="transform:translate(' + dx + 'vw,' + dy + 'vh);display:flex;align-items:center;gap:36px">' +
+    (cd ? '<div class="saver-candle">' + candleSvg(cd, 300) + '</div>' : '') +
+    '<div style="display:flex;flex-direction:column;align-items:center;gap:10px">' +
     '<div class="clock">' + pad(now.getHours()) + '.' + pad(now.getMinutes()) + '</div>' +
     '<div class="sub">' + esc(DAY_NAMES[(now.getDay() + 6) % 7]) + ' ' + now.getDate() + '. ' + esc(monthName(now)) + '</div>' +
     saverWx() +
     (next ? '<div class="sub" style="font-size:18px">Næste: ' + esc(memberById(S.family, next.ev.who).name + ' · ' + next.ev.title + ' ' + timeLabel(next.ev)) + '</div>' : '') +
-    '<div class="hintn">Tryk for at vække</div></div></button>';
+    (occLine ? '<div class="sub saver-occ">' + esc(occLine) + '</div>' : '') +
+    '<div class="hintn">Tryk for at vække</div></div></div></button>';
 }
 
 function saverWx() {
@@ -561,6 +639,7 @@ function renderNight() {
     var m = memberById(S.family, o.ev.who);
     h += '<div class="row"><span>' + esc(m.name) + ' · ' + esc(o.ev.title) + '</span><span>' + esc(timeLabel(o.ev)) + (o.driver ? ' · ' + esc(o.driver) + ' kører' : '') + '</span></div>';
   });
+  todays(S.family, ts).forEach(function (o) { h += '<div class="row"><span>' + o.emoji + ' ' + esc(o.title) + '</span><span>' + (early ? 'I dag' : 'I morgen') + '</span></div>'; });
   var tw = dayWeather(wx(), ts);
   if (tw) { h += '<div class="row"><span>Vejret</span><span class="nwx">' + wxIcon(tw.code, 26) + esc(wxText(tw.code)) + ' · ' + deg(tw.max) + ' / ' + deg(tw.min) + '</span></div>'; }
   h += '<div class="row"><span>Aftensmad</span><span>' + esc(S.meals[ts] || 'Ikke planlagt') + '</span></div></div>' +
@@ -571,6 +650,15 @@ function renderNight() {
 function renderCele() {
   var c = S.cele;
   if (!c) { overlay.innerHTML = ''; return; }
+  if (c.party) {
+    var pk = c.kid ? memberById(S.family, c.kid) : null, pp = pk ? pal(pk) : null;
+    overlay.innerHTML = '<div class="overlay">' + confettiHtml(90) + (c.kind === 'jul' || c.kind === 'advent' ? snowHtml() : '') +
+      '<div class="cele party ' + c.kind + '" role="alertdialog" aria-live="assertive" aria-label="' + esc(c.head) + '">' +
+      (c.advent ? wreathSvg(c.advent, 220) : '<div class="big-e">' + c.emoji + '</div>') + (pk ? avatar(pk, 64) : '') +
+      '<div class="h"' + (pp ? ' style="color:' + pp.text + '"' : '') + '>' + esc(c.head) + '</div><div class="b">' + esc(c.body) + '</div>' +
+      '<div class="btns" style="grid-template-columns:1fr"><button class="btn" style="background:' + (pp ? pp.color : c.kind === 'halloween' ? '#C2410C' : '#1F6B45') + '" data-a="close">Hurra!</button></div></div></div>';
+    return;
+  }
   var k = memberById(S.family, c.kid), p = pal(k);
   overlay.innerHTML = '<div class="overlay">' + confettiHtml(c.big ? 80 : 48) +
     '<div class="cele" role="alertdialog" aria-live="assertive" aria-label="' + esc(c.head) + '">' + avatar(k, 84) +
@@ -584,6 +672,14 @@ function renderCele() {
 // ---------- Paneler (barnets overblik, huskeliste) ----------
 var panelEl = document.createElement('div');
 document.body.appendChild(panelEl);
+
+function snowHtml() {
+  var h = '';
+  for (var i = 0; i < 40; i++) {
+    h += '<span class="snow" style="left:' + ((i * 53) % 100) + '%;width:' + (5 + (i % 4) * 2) + 'px;height:' + (5 + (i % 4) * 2) + 'px;animation-duration:' + (5 + (i % 6)) + 's;animation-delay:' + ((i % 10) * 0.4) + 's"></span>';
+  }
+  return h;
+}
 
 function renderPanel() {
   var pn = S.panel;
@@ -750,7 +846,7 @@ function onClick(e) {
     if (S.cele && !S.cele.bonus) { store.del(F('completions/' + S.cele.key)).catch(report); }
     S.cele = null; renderCele();
   }
-  else if (a === 'close') { S.cele = null; renderCele(); }
+  else if (a === 'close') { var wasParty = S.cele && S.cele.party; S.cele = null; renderCele(); if (wasParty) { setTimeout(nextParty, 400); } }
   else if (a === 'wake') {
     if (isNight()) { S.wakeUntil = Date.now() + 3 * 60 * 1000; setTimeout(render, 3 * 60 * 1000 + 500); }
     lastActive = Date.now(); requestWake(); setTimeout(render, 0);

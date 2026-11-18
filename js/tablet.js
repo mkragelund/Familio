@@ -8,7 +8,7 @@ import {
 import { esc, pal, icon, logo, avatar, confettiHtml, pick, autoUpdate, justUpdated, toast } from './ui.js';
 import { APP_VERSION } from './config.js';
 import { play, unlockAudio } from './sound.js';
-import { countdowns, todays, countdownText, candleDay, candleSvg, wreathSvg, adventLit, holidaySettings } from './occasions.js';
+import { countdowns, todays, countdownText, candleDay, candleSvg, wreathSvg, adventLit, holidaySettings, occArt } from './occasions.js';
 import { weatherLoc, getWeather, dayWeather, wxIcon, wxText, deg, dayBadge } from './weather.js';
 function sfx(name) { play(name, S.family && S.family.settings, S.dimShown); }
 // Vejrudsigten for familiens sted (null hvis intet sted er valgt). Ny udsigt → tegn igen.
@@ -454,7 +454,7 @@ function festive(ds) {
   var h = '<div class="festive"><div class="occ-list">';
   list.slice(0, 3).forEach(function (o) {
     var m = o.who ? memberById(S.family, o.who) : null, p = m ? pal(m) : null;
-    h += '<div class="occ" style="' + (p ? 'background:' + p.tint + ';color:' + p.text : '') + '"><span class="e">' + o.emoji + '</span><b class="n">' + o.days + '</b>' +
+    h += '<div class="occ" style="' + (p ? 'background:' + p.tint + ';color:' + p.text : '') + '">' + occArt(o, 50, p ? p.color : '#7C3AED') + '<b class="n">' + o.days + '</b>' +
       '<span class="t">' + (o.days === 1 ? 'dag' : 'dage') + ' til ' + esc(o.kind === 'jul' || o.kind === 'nytaar' || o.kind === 'halloween' ? o.title.toLowerCase() : o.title) + '</span></div>';
   });
   return h + '</div></div>';
@@ -606,7 +606,8 @@ function renderSaver() {
     return !o.cancelled && (o.ev.allDay || (o.ev.to || o.ev.from || '') >= pad(now.getHours()) + ':' + pad(now.getMinutes()));
   })[0];
   var cd = candleDay(t), cdl = countdowns(S.family, t), tdl = todays(S.family, t);
-  var occLine = tdl.length ? tdl[0].emoji + ' ' + tdl[0].title : (cdl.length ? cdl[0].emoji + ' ' + countdownText(cdl[0]) : '');
+  var occLine = tdl.length ? tdl[0].emoji + ' ' + tdl[0].title : (cdl.length ? countdownText(cdl[0]) : '');
+  var occPic = !tdl.length && cdl.length ? occArt(cdl[0], 40, cdl[0].who ? pal(memberById(S.family, cdl[0].who)).color : '#7C3AED') : '';
   return '<button class="saver" data-a="wake" aria-label="Tryk for at vække skærmen"><div style="transform:translate(' + dx + 'vw,' + dy + 'vh);display:flex;align-items:center;gap:36px">' +
     (cd ? '<div class="saver-candle">' + candleSvg(cd, 300) + '</div>' : '') +
     '<div style="display:flex;flex-direction:column;align-items:center;gap:10px">' +
@@ -614,7 +615,7 @@ function renderSaver() {
     '<div class="sub">' + esc(DAY_NAMES[(now.getDay() + 6) % 7]) + ' ' + now.getDate() + '. ' + esc(monthName(now)) + '</div>' +
     saverWx() +
     (next ? '<div class="sub" style="font-size:18px">Næste: ' + esc(memberById(S.family, next.ev.who).name + ' · ' + next.ev.title + ' ' + timeLabel(next.ev)) + '</div>' : '') +
-    (occLine ? '<div class="sub saver-occ">' + esc(occLine) + '</div>' : '') +
+    (occLine ? '<div class="sub saver-occ">' + occPic + '<span>' + esc(occLine) + '</span></div>' : '') +
     '<div class="hintn">Tryk for at vække</div></div></div></button>';
 }
 

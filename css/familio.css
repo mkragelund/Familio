@@ -410,3 +410,12 @@ html.dark, html.dark body { background: #000; }
 .xm-strip .adv { font-size: 13px; font-weight: 800; color: #E3F2E8; }
 .occ-set .occ-sub { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 14px 0 2px; border-top: 1px solid var(--line); }
 .occ-set .occ-row { width: 100%; background: transparent; border: 0; border-bottom: 1px solid var(--line); text-align: left; font: inherit; color: inherit; }
+.col-set .col-row { border-bottom: 1px solid var(--line); }
+.col-set .col-row:last-child { border-bottom: 0; }
+.col-set .col-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 0; background: transparent; border: 0; text-align: left; font: inherit; color: inherit; min-height: 56px; }
+.col-set .col-head .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.col-set .col-head .grow span { font-size: 13px; color: var(--muted); font-weight: 600; }
+.col-set .col-demo { font-size: 12px; font-weight: 800; border-radius: 8px; padding: 5px 8px; white-space: nowrap; }
+.swatches { display: grid; grid-template-columns: repeat(5, 44px); gap: 10px; justify-content: space-between; padding: 2px 0 14px; }
+.swatch { width: 44px; height: 44px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 1px var(--border); color: #fff; font-size: 18px; font-weight: 800; }
+.swatch[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--ink); }

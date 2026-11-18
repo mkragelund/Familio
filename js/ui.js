@@ -13,8 +13,17 @@ export var PALETTE = {
   teal: { color: '#0F766E', tint: '#DCF2EF', text: '#115E59', bright: '#2DD4BF' },
   pink: { color: '#BE185D', tint: '#FCE7F3', text: '#9D174D', bright: '#F472B6' },
   green: { color: '#15803D', tint: '#DCFCE7', text: '#166534', bright: '#4ADE80' },
-  gray: { color: '#1F2430', tint: '#ECE8DF', text: '#1F2430', bright: '#C9CCD6' }
+  gray: { color: '#1F2430', tint: '#ECE8DF', text: '#1F2430', bright: '#C9CCD6' },
+  navy: { color: '#1E3A8A', tint: '#DFE6F6', text: '#1E3A8A', bright: '#5B7BD5' },
+  rose: { color: '#DB4D92', tint: '#FDE6F1', text: '#A61E62', bright: '#F7A1C9' },
+  red: { color: '#C62828', tint: '#FBE3E3', text: '#991B1B', bright: '#F27474' }
 };
+
+// Farver man kan vælge i forældre-appen (rækkefølge og danske navne)
+export var COLOR_CHOICES = [
+  ['navy', 'Mørkeblå'], ['blue', 'Blå'], ['teal', 'Turkis'], ['green', 'Grøn'], ['purple', 'Lilla'],
+  ['rose', 'Lyserød'], ['pink', 'Hindbær'], ['red', 'Rød'], ['orange', 'Orange'], ['gray', 'Grå']
+];
 
 export function pal(member) {
   return PALETTE[(member && member.color) || 'gray'] || PALETTE.gray;

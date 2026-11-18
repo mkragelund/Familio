@@ -6,7 +6,7 @@ import {
   eventsOn, timeLabel, recurrenceLabel, sumPoints, periodBounds, memberById, kidsOf, shortDate, longDate,
   monthName, seedFamily, newId, dow, nthOf, nthLabel, familyIdNew, randomCode, formatCode, cleanCode, adultMember, KID_COLORS, initials
 } from './model.js';
-import { esc, pal, icon, logo, avatar, toast, autoUpdate, justUpdated } from './ui.js';
+import { esc, pal, icon, logo, avatar, toast, autoUpdate, justUpdated, COLOR_CHOICES, PALETTE } from './ui.js';
 import { HOLIDAYS, TYPES, holidaySettings, upcoming, todays } from './occasions.js';
 import { weatherLoc, getWeather, searchPlaces, dayBadge } from './weather.js';
 
@@ -479,6 +479,29 @@ function renderEventForm() {
   return sheetFrame(f.id ? 'Rediger aktivitet' : 'Ny aktivitet', b, foot, '<button class="btn ghost" data-a="close-sheet">Annuller</button>');
 }
 
+function renderColorSettings() {
+  var ms = (S.family.members || []).slice().sort(function (a, b) { return (a.kind === 'child' ? 0 : 1) - (b.kind === 'child' ? 0 : 1); });
+  ms.push(memberById(S.family, 'fam'));
+  var b = '<div class="section"><span class="label">Familiens farver</span><div class="card col-set" style="padding:4px 16px">';
+  ms.forEach(function (m) {
+    var p = pal(m), open = S.colorOpen === m.id;
+    b += '<div class="col-row"><button class="col-head" data-a="col-open" data-v="' + esc(m.id) + '" aria-expanded="' + open + '">' + avatar(m, 36) +
+      '<span class="grow"><b>' + esc(m.name) + '</b><span>' + esc(colorName(m.color)) + '</span></span>' +
+      '<span class="col-demo" style="background:' + p.tint + ';color:' + p.text + '">' + esc(m.kind === 'all' ? 'Fællesspisning' : 'Aktivitet') + '</span>' + icon(open ? 'x' : 'pencil', 16, 2.2) + '</button>';
+    if (open) {
+      b += '<div class="swatches">';
+      COLOR_CHOICES.forEach(function (c) {
+        var cp = PALETTE[c[0]];
+        b += '<button class="swatch" style="background:' + cp.color + '" data-a="col-pick" data-v="' + esc(m.id) + '" data-c="' + c[0] + '" aria-pressed="' + ((m.color || 'gray') === c[0]) + '" aria-label="' + c[1] + '">' + ((m.color || 'gray') === c[0] ? '✓' : '') + '</button>';
+      });
+      b += '</div>';
+    }
+    b += '</div>';
+  });
+  return b + '</div><span class="hint">Farven bruges til personens aktiviteter, pligter og point på tavlen og i appen.</span></div>';
+}
+function colorName(c) { var x = COLOR_CHOICES.filter(function (y) { return y[0] === (c || 'gray'); })[0]; return x ? x[1] : c; }
+
 var LEADS = [3, 5, 7, 10, 14, 21, 30, 45, 60];
 function leadSelect(attr, key, cur, julStyle) {
   var opts = julStyle ? [[23, 'Fra 1. dec.'], [14, '14 dage før'], [7, '7 dage før']] : LEADS.map(function (n) { return [n, n + ' dage før']; });
@@ -622,6 +645,7 @@ function renderSettings() {
     '<div style="padding-bottom:12px"><button class="btn secondary block" data-a="sound-test">Afspil testlyd på tavlen</button>' +
     '<span class="hint">Spiller også i stilletiden. Har ingen rørt tavlen siden den blev åbnet, så tryk én gang på den først.</span></div></div></div>';
 
+  b += renderColorSettings();
   b += renderWxSettings();
   b += renderOccSettings();
 
@@ -865,6 +889,13 @@ function onClick(e) {
     case 'occ-edit':
       var oe = (S.family.occasions || []).filter(function (x) { return x.id === v; })[0];
       if (oe) { S.form = { id: oe.id, type: oe.type || 'other', who: oe.who || '', title: oe.title || '', date: oe.date, yearly: !!oe.yearly, lead: oe.lead || 30, err: '' }; S.sheet = { kind: 'occ' }; render(); }
+      break;
+    case 'col-open': S.colorOpen = S.colorOpen === v ? null : v; render(); break;
+    case 'col-pick':
+      var cc = el.getAttribute('data-c');
+      if (v === 'fam') { fs.update('', { 'settings.famColor': cc }).catch(fail); }
+      else { fs.update('', { members: (S.family.members || []).map(function (m) { return m.id === v ? Object.assign({}, m, { color: cc }) : m; }) }).catch(fail); }
+      toast('Farven er ændret');
       break;
     case 'occ-back': S.form = null; S.sheet = { kind: 'settings' }; render(); break;
     case 'o-type': f.type = v; f.err = ''; render(); break;

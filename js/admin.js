@@ -366,6 +366,7 @@ function renderSheet() {
   if (s.kind === 'chore') { return renderChoreForm(); }
   if (s.kind === 'bonus') { return renderBonus(); }
   if (s.kind === 'occ') { return renderOccForm(); }
+  if (s.kind === 'rem') { return renderRemForm(); }
   return '';
 }
 
@@ -431,20 +432,15 @@ function formFromEvent(ev) {
   };
 }
 
-function renderEventForm() {
-  var f = S.form;
-  var people = (S.family.members || []).map(function (m) { return [m.id, m.name]; }).concat([['fam', 'Hele familien']]);
-  var b = '<div class="field"><label for="f-title">Titel</label><input class="input" id="f-title" data-f="title" placeholder="fx Svømning, tandlæge, legeaftale" value="' + esc(f.title) + '"></div>';
-  b += '<div class="field"><span class="label">Hvem</span><div class="chips">' + chipsHtml(people, 'f-who', f.who) + '</div></div>';
-  b += '<div class="field"><span class="label">Type</span><div class="seg"><button data-a="f-type" data-v="once" aria-pressed="' + (f.type === 'once') + '">Én gang</button>' +
-    '<button data-a="f-type" data-v="rec" aria-pressed="' + (f.type === 'rec') + '">Gentages</button></div></div>';
+function recurrenceFields(f, rem) {
+  var b = '';
   if (f.type === 'once') {
     b += '<div class="row2"><div class="field"><label for="f-date">Dato</label><input class="input" id="f-date" type="date" data-f="date" value="' + esc(f.date) + '"></div>' +
-      '<div class="field"><label for="f-endDate">Slutdato (valgfri)</label><input class="input" id="f-endDate" type="date" data-f="endDate" value="' + esc(f.endDate) + '"></div></div>' +
-      '<span class="hint">Brug slutdato til fx rejser over flere dage.</span>';
+      (rem ? '</div>' : '<div class="field"><label for="f-endDate">Slutdato (valgfri)</label><input class="input" id="f-endDate" type="date" data-f="endDate" value="' + esc(f.endDate) + '"></div></div>' +
+      '<span class="hint">Brug slutdato til fx rejser over flere dage.</span>');
   } else {
     b += '<div class="field"><span class="label">Hvor ofte</span><div class="chips">' +
-      chipsHtml([['w1', 'Hver uge'], ['w2', 'Hver 2. uge'], ['mw', 'Månedlig ugedag'], ['m1', 'Samme dato hver måned']], 'f-freq', f.freq) + '</div></div>';
+      chipsHtml((rem ? [['d', 'Hver dag']] : []).concat([['w1', 'Hver uge'], ['w2', 'Hver 2. uge'], ['mw', 'Månedlig ugedag'], ['m1', 'Samme dato hver måned']]), 'f-freq', f.freq) + '</div></div>';
     if (f.freq === 'mw') {
       b += '<div class="field"><span class="label">Hvilken i måneden</span><div class="chips">' +
         chipsHtml([['1', '1.'], ['2', '2.'], ['3', '3.'], ['4', '4.'], ['-1', 'Sidste']], 'f-nth', String(f.nth)) + '</div></div>';
@@ -453,7 +449,7 @@ function renderEventForm() {
         b += '<button class="chip" data-a="f-day1" data-v="' + (i + 1) + '" aria-pressed="' + (f.days[0] === i + 1) + '" aria-label="' + DAY_NAMES[i] + '">' + n + '</button>';
       });
       b += '</div><span class="hint" style="font-weight:800;color:var(--ink)">' + esc(nthLabel(f.nth) + ' ' + DAY_NAMES[(f.days[0] || 7) - 1].toLowerCase() + ' i hver måned') + '</span></div>';
-    } else if (f.freq !== 'm1') {
+    } else if (f.freq !== 'm1' && f.freq !== 'd') {
       b += '<div class="field"><span class="label">Ugedag(e)</span><div class="days7">';
       DAY_2.forEach(function (n, i) {
         b += '<button class="chip" data-a="f-day" data-v="' + (i + 1) + '" aria-pressed="' + (f.days.indexOf(i + 1) >= 0) + '" aria-label="' + DAY_NAMES[i] + '">' + n + '</button>';
@@ -462,8 +458,19 @@ function renderEventForm() {
     }
     b += '<div class="row2"><div class="field"><label for="f-start">Starter</label><input class="input" id="f-start" type="date" data-f="start" value="' + esc(f.start) + '"></div>' +
       '<div class="field"><label for="f-end">Slutter (valgfri)</label><input class="input" id="f-end" type="date" data-f="end" value="' + esc(f.end) + '"></div></div>' +
-      '<span class="hint">' + (f.freq === 'm1' ? 'Gentages samme dato hver måned som startdatoen. ' : '') + (f.freq === 'mw' ? 'Første gang er den første ' + DAY_NAMES[(f.days[0] || 7) - 1].toLowerCase() + ' efter startdatoen, der passer. ' : '') + 'Tom slutdato = fortsætter, til I sletter den. En enkelt gang kan aflyses fra ugeoversigten.</span>';
+      '<span class="hint">' + (f.freq === 'm1' ? 'Gentages samme dato hver måned som startdatoen. ' : '') + (f.freq === 'mw' ? 'Første gang er den første ' + DAY_NAMES[(f.days[0] || 7) - 1].toLowerCase() + ' efter startdatoen, der passer. ' : '') + 'Tom slutdato = fortsætter, til I sletter den.' + (rem ? '' : ' En enkelt gang kan aflyses fra ugeoversigten.') + '</span>';
   }
+  return b;
+}
+
+function renderEventForm() {
+  var f = S.form;
+  var people = (S.family.members || []).map(function (m) { return [m.id, m.name]; }).concat([['fam', 'Hele familien']]);
+  var b = '<div class="field"><label for="f-title">Titel</label><input class="input" id="f-title" data-f="title" placeholder="fx Svømning, tandlæge, legeaftale" value="' + esc(f.title) + '"></div>';
+  b += '<div class="field"><span class="label">Hvem</span><div class="chips">' + chipsHtml(people, 'f-who', f.who) + '</div></div>';
+  b += '<div class="field"><span class="label">Type</span><div class="seg"><button data-a="f-type" data-v="once" aria-pressed="' + (f.type === 'once') + '">Én gang</button>' +
+    '<button data-a="f-type" data-v="rec" aria-pressed="' + (f.type === 'rec') + '">Gentages</button></div></div>';
+  b += recurrenceFields(f, false);
   if (!f.allDay) {
     b += '<div class="row2"><div class="field"><label for="f-from">Fra</label><input class="input" id="f-from" type="time" data-f="from" value="' + esc(f.from) + '"></div>' +
       '<div class="field"><label for="f-to">Til</label><input class="input" id="f-to" type="time" data-f="to" value="' + esc(f.to) + '"></div></div>';
@@ -477,6 +484,66 @@ function renderEventForm() {
   if (f.err) { b += '<div class="err" role="alert">' + esc(f.err) + '</div>'; }
   var foot = '<button class="btn block" style="height:54px" data-a="f-save">' + (f.id ? 'Gem ændringer' : 'Gem aktivitet') + '</button>';
   return sheetFrame(f.id ? 'Rediger aktivitet' : 'Ny aktivitet', b, foot, '<button class="btn ghost" data-a="close-sheet">Annuller</button>');
+}
+
+var REM_ICONS = ['🔔', '👓', '💊', '🦷', '📚', '🎒', '🎻', '⚽', '🐶', '🌱', '🗑️', '🧺', '🛁', '🍎', '💧', '⏰'];
+
+function renderRemSettings() {
+  var list = (S.family.reminders || []).slice().sort(function (a, b) { return (a.time || '') < (b.time || '') ? -1 : 1; });
+  var b = '<div class="section"><span class="label">Påmindelser på tavlen</span><div class="card occ-set" style="padding:4px 16px">';
+  if (!list.length) { b += '<div class="row"><span class="grow"><span>Ingen påmindelser endnu. Tavlen siger til med lyd på klokkeslættet.</span></span></div>'; }
+  list.forEach(function (r) {
+    var m = r.who ? memberById(S.family, r.who) : null;
+    b += '<button class="row occ-row" data-a="rem-edit" data-v="' + esc(r.id) + '"><span class="e">' + esc(r.icon || '🔔') + '</span><span class="grow"><b>' + esc(r.text) + (m ? ' · ' + esc(m.name) : '') + '</b><span>' +
+      esc('Kl. ' + (r.time || '').replace(':', '.') + ' · ' + recurrenceLabel(r) + (r.chore ? ' · kun hvis ikke klaret' : '')) + '</span></span>' + icon('pencil', 18, 2) + '</button>';
+  });
+  return b + '</div><button class="btn dashed" data-a="rem-new">+ Ny påmindelse</button></div>';
+}
+
+function renderRemForm() {
+  var f = S.form;
+  var people = [['', 'Alle']].concat((S.family.members || []).map(function (m) { return [m.id, m.name]; }));
+  var b = '<div class="field"><label for="r-text">Hvad skal tavlen minde om?</label><input class="input" id="r-text" data-f="text" placeholder="fx Øjenklap på" value="' + esc(f.text) + '"></div>';
+  b += '<div class="field"><span class="label">Ikon</span><div class="iconpick">';
+  REM_ICONS.forEach(function (ic) { b += '<button class="ip" data-a="r-icon" data-v="' + ic + '" aria-pressed="' + (f.icon === ic) + '">' + ic + '</button>'; });
+  b += '</div></div>';
+  b += '<div class="field"><label for="r-time">Klokkeslæt</label><input class="input" id="r-time" type="time" data-f="time" value="' + esc(f.time) + '"></div>';
+  b += '<div class="field"><span class="label">Hvem er den til</span><div class="chips">' + chipsHtml(people, 'r-who', f.who) + '</div></div>';
+  b += '<div class="field"><span class="label">Gentagelse</span><div class="seg"><button data-a="f-type" data-v="once" aria-pressed="' + (f.type === 'once') + '">Én gang</button>' +
+    '<button data-a="f-type" data-v="rec" aria-pressed="' + (f.type === 'rec') + '">Gentages</button></div></div>';
+  b += recurrenceFields(f, true);
+  var m = f.who ? memberById(S.family, f.who) : null;
+  var mine = m ? (S.family.chores || []).filter(function (c) { return (c.kids || []).indexOf(m.id) >= 0; }) : [];
+  if (mine.length) {
+    b += '<div class="field"><span class="label">Spring over, hvis pligten er klaret (valgfri)</span><div class="chips">' +
+      chipsHtml([['', 'Altid']].concat(mine.map(function (c) { return [c.id, c.label]; })), 'r-chore', f.chore) + '</div>' +
+      '<span class="hint">Så kan ' + esc(m.name.split(' ')[0]) + ' krydse pligten af direkte fra påmindelsen.</span></div>';
+  }
+  if (f.err) { b += '<div class="err" role="alert">' + esc(f.err) + '</div>'; }
+  var foot = '<div style="display:flex;flex-direction:column;gap:8px"><button class="btn block" style="height:54px" data-a="r-save">Gem påmindelse</button>' +
+    (f.id ? '<button class="btn danger" data-a="r-del">Slet påmindelsen</button>' : '') + '</div>';
+  return sheetFrame(f.id ? 'Rediger påmindelse' : 'Ny påmindelse', b, foot, '<button class="btn ghost" data-a="occ-back">Tilbage</button>');
+}
+
+function remForm(r) {
+  var d = ymd(today());
+  r = r || {};
+  return {
+    id: r.id || '', text: r.text || '', icon: r.icon || '🔔', time: r.time || '16:00', who: r.who || '', chore: r.chore || '',
+    type: r.type || 'rec', date: r.date || d, freq: r.freq || 'd', days: (r.days || [dow(parseYmd(d))]).slice(), nth: r.nth || Math.min(4, nthOf(parseYmd(d))),
+    start: r.start || d, end: r.end || '', err: ''
+  };
+}
+
+function saveRem() {
+  var f = S.form;
+  if (!f.text.trim()) { f.err = 'Skriv hvad tavlen skal minde om.'; render(); return; }
+  if (!/^\d{2}:\d{2}$/.test(f.time || '')) { f.err = 'Vælg et klokkeslæt.'; render(); return; }
+  if (f.type === 'rec' && (f.freq === 'w1' || f.freq === 'w2') && !f.days.length) { f.err = 'Vælg mindst én ugedag.'; render(); return; }
+  var r = { id: f.id || newId(), text: f.text.trim(), icon: f.icon || '🔔', time: f.time, who: f.who || '', chore: f.who ? (f.chore || '') : '', type: f.type };
+  if (f.type === 'once') { r.date = f.date; } else { r.freq = f.freq; r.days = f.days.slice(); r.nth = f.nth; r.start = f.start; r.end = f.end || ''; }
+  var list = (S.family.reminders || []).filter(function (x) { return x.id !== r.id; }).concat([r]);
+  fs.update('', { reminders: list }).then(function () { toast('Gemt'); S.form = null; S.sheet = { kind: 'settings' }; render(); }).catch(fail);
 }
 
 function renderColorSettings() {
@@ -651,6 +718,7 @@ function renderSettings() {
     '<div style="padding-bottom:12px"><button class="btn secondary block" data-a="sound-test">Afspil testlyd på tavlen</button>' +
     '<span class="hint">Spiller også i stilletiden. Har ingen rørt tavlen siden den blev åbnet, så tryk én gang på den først.</span></div></div></div>';
 
+  b += renderRemSettings();
   b += renderColorSettings();
   b += renderWxSettings();
   b += renderOccSettings();
@@ -661,7 +729,6 @@ function renderSettings() {
   });
   b += '</div><form id="driverform" style="display:flex;gap:8px"><label for="drivernew" class="sr">Ny chauffør</label><input id="drivernew" class="input" placeholder="fx Mormor"><button class="btn" type="submit">Tilføj</button></form></div>';
 
-  b += '<div class="section"><span class="label">Push-påmindelser</span><div class="card"><b>Øjenklap – Ida Marie kl. 16.00</b><span class="hint">Kommer i næste version. Det kræver en lille planlagt funktion i Firebase.</span></div></div>';
 
   b += '<div class="section"><span class="label">Konto</span><div class="list"><div class="item"><div class="grow"><b>' + esc(S.user.name || S.user.email) + '</b><span>' + esc(S.user.email) + '</span></div>' +
     '<button class="btn danger" data-a="logout">Log ud</button></div></div></div>';
@@ -906,6 +973,20 @@ function onClick(e) {
     case 'occ-back': S.form = null; S.sheet = { kind: 'settings' }; render(); break;
     case 'o-type': f.type = v; f.err = ''; render(); break;
     case 'o-icon': f.icon = v; render(); break;
+    case 'rem-new': S.form = remForm(); S.sheet = { kind: 'rem' }; render(); break;
+    case 'rem-edit':
+      var re0 = (S.family.reminders || []).filter(function (x) { return x.id === v; })[0];
+      if (re0) { S.form = remForm(re0); S.sheet = { kind: 'rem' }; render(); }
+      break;
+    case 'r-icon': f.icon = v; render(); break;
+    case 'r-who': f.who = v; f.chore = ''; render(); break;
+    case 'r-chore': f.chore = v; render(); break;
+    case 'r-save': saveRem(); break;
+    case 'r-del':
+      if (window.confirm('Slet påmindelsen?')) {
+        fs.update('', { reminders: (S.family.reminders || []).filter(function (x) { return x.id !== f.id; }) }).then(function () { S.form = null; S.sheet = { kind: 'settings' }; render(); }).catch(fail);
+      }
+      break;
     case 'o-who': f.who = f.who === v ? '' : v; f.err = ''; render(); break;
     case 'o-save': saveOcc(); break;
     case 'o-del':

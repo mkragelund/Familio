@@ -36,7 +36,7 @@ var P = {
   vaer: '<path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/>',
   stoev: '<path d="M4 21h11a3 3 0 0 0 0-6H8"/><path d="M8 15V5a2 2 0 0 1 2-2h3"/><circle cx="18" cy="18" r="1"/><path d="M2 21h2"/>',
   laes: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
-  oejen: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 4l18 16"/>',
+  oejen: '<circle cx="6.5" cy="14" r="4"/><circle cx="17.5" cy="14" r="4"/><path d="M10.5 13.5c1-1 2-1 3 0M2.5 13l-1-4.5M21.5 13l1-4.5"/>',
   star: '<path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/>',
   check: '<path d="M20 6L9 17l-5-5"/>',
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',

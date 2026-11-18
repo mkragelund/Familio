@@ -336,3 +336,33 @@ html.dark, html.dark body { background: #000; }
 .tb-nav button { font-size: 15px; gap: 6px; }
 
 .ver { font-style: normal; font-size: 11px; font-weight: 700; color: #9AA0AE; letter-spacing: 0; margin-left: 6px; }
+
+/* ================= VEJR ================= */
+.wx-ic { flex-shrink: 0; display: block; }
+.tb-wx { flex: 1; min-width: 0; max-width: 300px; display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 16px; padding: 7px 14px 7px 10px; box-shadow: 0 1px 2px rgba(31,36,48,.08); }
+.tb-wx.empty { visibility: hidden; padding: 0; box-shadow: none; }
+.tb-wx .wx-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.tb-wx .label { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-wx .wx-now { display: flex; align-items: baseline; gap: 7px; white-space: nowrap; min-width: 0; }
+.tb-wx .wx-now b { font-family: var(--display); font-weight: 600; font-size: 26px; line-height: 1; }
+.tb-wx .wx-now span { font-size: 13px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; }
+.tb-wx .wx-range { font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; display: flex; align-items: center; gap: 3px; }
+.wx-day { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; line-height: 1.05; }
+.wx-day > span { display: flex; flex-direction: column; }
+.wx-day b { font-weight: 800; }
+.wx-day i { font-style: normal; font-weight: 700; color: var(--muted); font-size: 12px; }
+.daycol .wx-day { flex-direction: row; }
+.daycol > div > .wx-day { margin-top: 6px; }
+.daycol .wx-day > span { flex-direction: row; gap: 5px; align-items: baseline; }
+.daytabs .chip { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.dv-wx { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.dv-wx b { font-weight: 800; }
+.dv-wx span { color: var(--muted); font-weight: 700; display: inline-flex; align-items: center; gap: 3px; }
+.saver-wx { display: flex; align-items: center; gap: 12px; color: #5B6070; font-size: 18px; font-weight: 700; margin-top: 4px; }
+.saver-wx b { font-family: var(--display); font-weight: 500; font-size: 34px; color: #6B7080; }
+.saver-wx .wx-ic { opacity: .6; }
+.night .nwx { display: inline-flex; align-items: center; gap: 8px; }
+.ad .card-head .wx-day { margin-left: auto; margin-right: 6px; }
+.wx-results { display: flex; flex-direction: column; gap: 6px; }
+.wx-results button { text-align: left; background: #fff; border: 2px solid var(--border); border-radius: 12px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; font-size: 15px; }
+.wx-results button span { font-size: 13px; color: var(--muted); font-weight: 600; }

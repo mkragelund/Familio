@@ -7,6 +7,7 @@ import {
   monthName, seedFamily, newId, dow, nthOf, nthLabel, familyIdNew, randomCode, formatCode, cleanCode, adultMember, KID_COLORS, initials
 } from './model.js';
 import { esc, pal, icon, logo, avatar, toast, autoUpdate, justUpdated } from './ui.js';
+import { weatherLoc, getWeather, searchPlaces, dayBadge } from './weather.js';
 
 var store;
 var S = {
@@ -16,6 +17,8 @@ var S = {
 };
 var app = document.getElementById('app');
 var unsubs = [], famUnsub = null, mealsUnsub = null, userUnsub = null;
+// Vejrudsigten for familiens sted (null hvis intet sted er valgt)
+function wx() { return getWeather(weatherLoc(S.family), function () { render(); }); }
 function F(p) { return 'families/' + S.fid + (p ? '/' + p : ''); }
 // Familie-relative kald
 var fs = {
@@ -236,10 +239,11 @@ function evRow(o, ds) {
 function renderWeek() {
   var h = renderTop('Familio', S.family.name || '', true) + '<div class="ad-body">';
   var td = ymd(today());
+  var data = wx();
   weekDays(S.weekMon).forEach(function (d, i) {
     var ds = ymd(d);
     var evs = eventsOn(S.events, ds);
-    h += '<div class="card' + (ds === td ? ' today' : '') + '"><div class="card-head"><b>' + DAY_NAMES[i] + ' <span>' + esc(shortDate(d)) + '</span></b>' +
+    h += '<div class="card' + (ds === td ? ' today' : '') + '"><div class="card-head"><b>' + DAY_NAMES[i] + ' <span>' + esc(shortDate(d)) + '</span></b>' + dayBadge(data, ds, 26) +
       '<button class="iconbtn" data-a="new-ev" data-date="' + ds + '" aria-label="Tilføj aktivitet ' + DAY_NAMES[i] + '" style="margin:-10px -8px -10px 0">' + icon('plus', 20, 2.2) + '</button></div>' +
       '<button class="mealline' + (S.meals[ds] ? '' : ' empty') + '" data-a="tab" data-t="mad">' + icon('food', 16, 2) + esc(S.meals[ds] || 'Ingen aftensmad planlagt') + '</button>';
     evs.forEach(function (o) { h += evRow(o, ds); });
@@ -472,6 +476,29 @@ function renderEventForm() {
   return sheetFrame(f.id ? 'Rediger aktivitet' : 'Ny aktivitet', b, foot, '<button class="btn ghost" data-a="close-sheet">Annuller</button>');
 }
 
+function renderWxSettings() {
+  var loc = weatherLoc(S.family);
+  var q = S.wxSearch || {};
+  var b = '<div class="section"><span class="label">Vejrudsigt</span><div class="card">';
+  if (loc && !q.open) {
+    b += '<b>' + esc(loc.name) + '</b><span class="hint">' + esc(loc.area ? loc.area + ' · ' : '') + 'Vises på tavlen og i ugeoversigten.</span>' +
+      '<div class="row2"><button class="btn secondary" data-a="wx-change">Skift sted</button><button class="btn ghost" data-a="wx-off">Slå vejret fra</button></div>';
+  } else {
+    b += '<b>' + (loc ? 'Skift sted' : 'Vis vejret for jeres by') + '</b><span class="hint">Søg på by eller postnummer. Udsigten kommer fra Open-Meteo.</span>' +
+      '<form id="wxform" style="display:flex;gap:8px"><label for="wxq" class="sr">By eller postnummer</label><input id="wxq" class="input" placeholder="fx Holte eller 2840" value="' + esc(q.q || '') + '" enterkeyhint="search"><button class="btn" type="submit">Søg</button></form>';
+    if (q.busy) { b += '<span class="hint">Søger…</span>'; }
+    else if (q.err) { b += '<span class="hint" style="color:var(--danger)">' + esc(q.err) + '</span>'; }
+    else if (q.results && !q.results.length) { b += '<span class="hint">Fandt ingen steder. Prøv et andet navn.</span>'; }
+    if (q.results && q.results.length) {
+      b += '<div class="wx-results">';
+      q.results.forEach(function (r, i) { b += '<button data-a="wx-pick" data-v="' + i + '"><b>' + esc(r.name) + '</b>' + (r.area ? '<span>' + esc(r.area) + '</span>' : '') + '</button>'; });
+      b += '</div>';
+    }
+    if (loc) { b += '<button class="btn ghost" data-a="wx-cancel">Annullér</button>'; }
+  }
+  return b + '</div></div>';
+}
+
 function renderSettings() {
   var fam = S.family;
   var b = '';
@@ -524,6 +551,8 @@ function renderSettings() {
     '<div style="padding-bottom:12px"><button class="btn secondary block" data-a="sound-test">Afspil testlyd på tavlen</button>' +
     '<span class="hint">Spiller også i stilletiden. Har ingen rørt tavlen siden den blev åbnet, så tryk én gang på den først.</span></div></div></div>';
 
+  b += renderWxSettings();
+
   b += '<div class="section"><span class="label">Chauffører</span><div class="chips">';
   (fam.drivers || []).forEach(function (d) {
     b += '<button class="chip" data-a="driver-del" data-v="' + esc(d) + '" aria-label="Fjern ' + esc(d) + '">' + esc(d) + ' ✕</button>';
@@ -574,6 +603,19 @@ function onSubmit(e) {
     var ev = findEvent(S.sheet.id);
     if (v && ev) { fs.update('events/' + ev.id, { pack: (ev.pack || []).concat([v]) }).catch(fail); }
     document.getElementById('packnew').value = '';
+  } else if (id === 'wxform') {
+    var q = document.getElementById('wxq').value.trim();
+    S.wxSearch = { open: true, q: q, busy: true };
+    document.activeElement && document.activeElement.blur && document.activeElement.blur();
+    render();
+    searchPlaces(q).then(function (list) {
+      if (!S.wxSearch || S.wxSearch.q !== q) { return; }
+      S.wxSearch.busy = false; S.wxSearch.results = list; render();
+    }).catch(function () {
+      if (!S.wxSearch) { return; }
+      S.wxSearch.busy = false; S.wxSearch.err = 'Kunne ikke søge – tjek internettet'; render();
+    });
+    return;
   } else if (id === 'driverform') {
     var d = document.getElementById('drivernew').value.trim();
     if (d) { fs.update('', { drivers: FV.union(d) }).catch(fail); }
@@ -631,7 +673,21 @@ function onClick(e) {
       var d = +el.getAttribute('data-d');
       S.weekMon = d === 0 ? mondayOf(today()) : addDays(S.weekMon, 7 * d);
       watchMeals(); render(); break;
-    case 'settings': S.invite = null; S.sheet = { kind: 'settings' }; render(); break;
+    case 'settings': S.invite = null; S.wxSearch = null; S.sheet = { kind: 'settings' }; render(); break;
+    case 'wx-change': S.wxSearch = { open: true }; render(); break;
+    case 'wx-cancel': S.wxSearch = null; render(); break;
+    case 'wx-off':
+      if (window.confirm('Slå vejrudsigten fra på tavlen og i appen?')) { fs.update('', { 'settings.weather': null }).then(function () { toast('Vejret er slået fra'); }).catch(fail); }
+      break;
+    case 'wx-pick':
+      var pl = S.wxSearch && S.wxSearch.results && S.wxSearch.results[+v];
+      if (pl) {
+        S.wxSearch = null;
+        fs.update('', { 'settings.weather': { name: pl.name, area: pl.area || '', lat: pl.lat, lon: pl.lon } })
+          .then(function () { toast('Vejret vises nu for ' + pl.name); }).catch(fail);
+        render();
+      }
+      break;
     case 'close-sheet': closeSheet(); break;
     case 'logout': closeSheet(); S.onboard = null; store.signOut(); break;
     case 'google':

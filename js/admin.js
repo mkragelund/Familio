@@ -486,7 +486,7 @@ function renderEventForm() {
   return sheetFrame(f.id ? 'Rediger aktivitet' : 'Ny aktivitet', b, foot, '<button class="btn ghost" data-a="close-sheet">Annuller</button>');
 }
 
-var REM_ICONS = ['🔔', '👁️', '💊', '🦷', '📚', '🎒', '🎻', '⚽', '🐶', '🌱', '🗑️', '🧺', '🛁', '🍎', '💧', '⏰'];
+var REM_ICONS = ['🔔', '👓', '💊', '🦷', '📚', '🎒', '🎻', '⚽', '🐶', '🌱', '🗑️', '🧺', '🛁', '🍎', '💧', '⏰'];
 
 function renderRemSettings() {
   var list = (S.family.reminders || []).slice().sort(function (a, b) { return (a.time || '') < (b.time || '') ? -1 : 1; });

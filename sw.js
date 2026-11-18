@@ -1,9 +1,9 @@
 // Familio service worker – gør appen installerbar og hurtig at starte.
 // HTML hentes altid fra nettet først (så opdateringer slår igennem), resten fra cache.
-var CACHE = 'familio-1.5.0';
+var CACHE = 'familio-1.6.0';
 var SHELL = [
   './', './index.html', './tablet.html', './css/familio.css',
-  './js/config.js', './js/model.js', './js/store.js', './js/ui.js', './js/admin.js', './js/tablet.js', './js/sound.js', './js/weather.js',
+  './js/config.js', './js/model.js', './js/store.js', './js/ui.js', './js/admin.js', './js/tablet.js', './js/sound.js', './js/weather.js', './js/occasions.js',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
   './manifest.webmanifest', './manifest-tablet.webmanifest'
 ];

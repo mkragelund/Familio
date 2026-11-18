@@ -256,9 +256,17 @@ function render() {
   else if (isSaver()) { html += renderSaver(); }
   S.dimShown = isNight() || isSaver();
   document.documentElement.classList.toggle('dark', S.dimShown);
+  setThemeColor(S.nightShown ? '#0B0D12' : S.dimShown ? '#000000' : '#1F2430');
   if (S.dimShown) { releaseWake(); }
   app.innerHTML = html;
   renderPanel();
+}
+
+// iOS farver statuslinjen (ur, wifi, batteri) efter theme-color. I nat/pauseskærm gøres den sort,
+// så den ikke lyser som en blå stribe øverst. Selve statuslinjen kan iPadOS ikke skjule.
+var themeMeta = document.querySelector('meta[name="theme-color"]');
+function setThemeColor(c) {
+  if (themeMeta && themeMeta.getAttribute('content') !== c) { themeMeta.setAttribute('content', c); }
 }
 
 function renderPairing() {
@@ -317,7 +325,7 @@ function kidBtn(date, cell) {
   var on = isDone(date, cell.chore.id, cell.kid.id);
   var p = pal(cell.kid);
   var st = on ? 'background:' + p.color + ';border-color:' + p.color + ';color:#fff' : 'color:' + p.text;
-  return '<button class="kbtn" style="' + st + '" data-a="chore" data-date="' + date + '" data-chore="' + esc(cell.chore.id) + '" data-kid="' + esc(cell.kid.id) +
+  return '<button class="kbtn' + lockCls(date, on) + '" style="' + st + '" data-a="chore" data-date="' + date + '" data-chore="' + esc(cell.chore.id) + '" data-kid="' + esc(cell.kid.id) +
     '" aria-pressed="' + on + '" aria-label="' + esc(cell.chore.label + ' – ' + cell.kid.name) + '">' + (on ? '✓ ' : '') + esc(cell.kid.short) + '</button>';
 }
 
@@ -397,7 +405,7 @@ function renderDay() {
     h += '<div class="dv-kid"><button class="dv-kidhead" data-a="kid" data-kid="' + esc(k.id) + '">' + avatar(k, 36) + '<b>' + esc(k.name.split(' ')[0]) + '</b><span style="color:' + p.text + '">' + n + '/' + mine.length + '</span></button>';
     mine.forEach(function (c) {
       var on = isDone(ds, c.id, k.id);
-      h += '<button class="dv-chore" style="' + (on ? 'background:' + p.color + ';color:#fff;border-color:' + p.color : 'background:#fff;color:' + p.text + ';border-color:' + p.tint) + '" data-a="chore" data-date="' + ds + '" data-chore="' + esc(c.id) + '" data-kid="' + esc(k.id) + '" aria-pressed="' + on + '">' +
+      h += '<button class="dv-chore' + lockCls(ds, on) + '" style="' + (on ? 'background:' + p.color + ';color:#fff;border-color:' + p.color : 'background:#fff;color:' + p.text + ';border-color:' + p.tint) + '" data-a="chore" data-date="' + ds + '" data-chore="' + esc(c.id) + '" data-kid="' + esc(k.id) + '" aria-pressed="' + on + '">' +
         icon(c.icon || 'star', 22, 2) + '<span class="l">' + esc(c.label) + '</span><span class="p">' + (on ? '✓' : '+' + c.pts) + '</span></button>';
     });
     h += '</div>';
@@ -434,7 +442,7 @@ function renderChores(mon) {
     mine.forEach(function (c) {
       var on = isDone(S.selDay, c.id, k.id);
       var st = on ? 'background:' + p.color + ';border-color:' + p.color + ';color:#fff' : 'background:' + p.tint + ';border-color:' + p.tint + ';color:' + p.text;
-      h += '<button class="tile" style="' + st + '" data-a="chore" data-date="' + S.selDay + '" data-chore="' + esc(c.id) + '" data-kid="' + esc(k.id) +
+      h += '<button class="tile' + lockCls(S.selDay, on) + '" style="' + st + '" data-a="chore" data-date="' + S.selDay + '" data-chore="' + esc(c.id) + '" data-kid="' + esc(k.id) +
         '" aria-pressed="' + on + '">' + icon(c.icon || 'star', 40, 1.8) + '<span class="l">' + esc(c.label) + '</span><span class="s">' + (on ? '✓ Klaret!' : '+' + c.pts + ' point') + '</span></button>';
     });
     h += '</div></div>';
@@ -626,7 +634,17 @@ function checkBonus(list) {
 // ---------- Handlinger ----------
 var celeTimer = null;
 
+// Børnene kan kun krydse pligter af (og fortryde) på selve dagen. Glemte pligter klarer forældrene med bonus.
+function lockCls(date, on) { return date === S.day ? '' : ' locked' + (on ? '' : ' dim'); }
+
 function toggleChore(date, choreId, kidId) {
+  if (date !== S.day) {
+    var t = document.createElement('div');
+    t.className = 'toast'; t.textContent = 'Pligter kan kun krydses af i dag';
+    document.body.appendChild(t);
+    setTimeout(function () { if (t.parentNode) { t.parentNode.removeChild(t); } }, 2500);
+    return;
+  }
   var chore = chores().filter(function (c) { return c.id === choreId; })[0];
   if (!chore) { return; }
   var id = completionId(date, choreId, kidId);

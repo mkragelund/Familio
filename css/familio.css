@@ -419,3 +419,11 @@ html.dark, html.dark body { background: #000; }
 .swatches { display: grid; grid-template-columns: repeat(5, 44px); gap: 10px; justify-content: space-between; padding: 2px 0 14px; }
 .swatch { width: 44px; height: 44px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 1px var(--border); color: #fff; font-size: 18px; font-weight: 800; }
 .swatch[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--ink); }
+.occ { padding: 4px 12px 4px 6px; }
+.occ-art { flex-shrink: 0; display: block; overflow: visible; }
+.occ-art .spark { animation: glow .4s ease-in-out infinite alternate; }
+.saver .saver-occ { display: flex; align-items: center; gap: 10px; }
+.saver .saver-occ .occ-art { opacity: .6; }
+.iconpick { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.iconpick .ip { height: 40px; border-radius: 10px; border: 2px solid var(--border); background: #fff; font-size: 22px; padding: 0; }
+.iconpick .ip[aria-pressed="true"] { border-color: var(--ink); background: #F4F1EA; }

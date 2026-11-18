@@ -7,7 +7,7 @@ import {
   monthName, seedFamily, newId, dow, nthOf, nthLabel, familyIdNew, randomCode, formatCode, cleanCode, adultMember, KID_COLORS, initials
 } from './model.js';
 import { esc, pal, icon, logo, avatar, toast, autoUpdate, justUpdated, COLOR_CHOICES, PALETTE } from './ui.js';
-import { HOLIDAYS, TYPES, holidaySettings, upcoming, todays } from './occasions.js';
+import { HOLIDAYS, TYPES, OTHER_ICONS, holidaySettings, upcoming, todays } from './occasions.js';
 import { weatherLoc, getWeather, searchPlaces, dayBadge } from './weather.js';
 
 var store;
@@ -544,7 +544,13 @@ function renderOccForm() {
   Object.keys(TYPES).forEach(function (k) {
     b += '<button class="chip" data-a="o-type" data-v="' + k + '" aria-pressed="' + (f.type === k) + '">' + TYPES[k].emoji + ' ' + TYPES[k].label + '</button>';
   });
-  b += '</div></div><div class="field"><span class="label">' + (bday ? 'Hvis fødselsdag' : 'Hvem (valgfrit)') + '</span><div class="chips">';
+  b += '</div></div>';
+  if (f.type === 'other') {
+    b += '<div class="field"><span class="label">Ikon</span><div class="iconpick">';
+    OTHER_ICONS.forEach(function (ic) { b += '<button class="ip" data-a="o-icon" data-v="' + ic + '" aria-pressed="' + ((f.icon || '⭐') === ic) + '">' + ic + '</button>'; });
+    b += '</div></div>';
+  }
+  b += '<div class="field"><span class="label">' + (bday ? 'Hvis fødselsdag' : 'Hvem (valgfrit)') + '</span><div class="chips">';
   (S.family.members || []).forEach(function (m) {
     b += '<button class="chip" data-a="o-who" data-v="' + esc(m.id) + '" aria-pressed="' + (f.who === m.id) + '">' + esc(m.name) + '</button>';
   });
@@ -565,7 +571,7 @@ function saveOcc() {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date || '')) { f.err = 'Vælg en dato.'; render(); return; }
   if (bday && !f.who && !f.title.trim()) { f.err = 'Vælg hvem der har fødselsdag, eller skriv et navn.'; render(); return; }
   if (!bday && !f.title.trim()) { f.err = 'Giv mærkedagen et navn.'; render(); return; }
-  var o = { id: f.id || newId(), type: f.type, title: f.title.trim(), date: f.date, yearly: bday ? true : !!f.yearly, who: f.who || '', lead: +f.lead || 30 };
+  var o = { id: f.id || newId(), type: f.type, title: f.title.trim(), date: f.date, yearly: bday ? true : !!f.yearly, who: f.who || '', lead: +f.lead || 30, icon: f.type === 'other' ? (f.icon || '⭐') : '' };
   var list = (S.family.occasions || []).filter(function (x) { return x.id !== o.id; }).concat([o]);
   fs.update('', { occasions: list }).then(function () { toast('Gemt'); S.form = null; S.sheet = { kind: 'settings' }; render(); }).catch(fail);
 }
@@ -888,7 +894,7 @@ function onClick(e) {
     case 'occ-new': S.form = { id: '', type: 'birthday', who: '', title: '', date: '', yearly: false, lead: 30, err: '' }; S.sheet = { kind: 'occ' }; render(); break;
     case 'occ-edit':
       var oe = (S.family.occasions || []).filter(function (x) { return x.id === v; })[0];
-      if (oe) { S.form = { id: oe.id, type: oe.type || 'other', who: oe.who || '', title: oe.title || '', date: oe.date, yearly: !!oe.yearly, lead: oe.lead || 30, err: '' }; S.sheet = { kind: 'occ' }; render(); }
+      if (oe) { S.form = { id: oe.id, type: oe.type || 'other', who: oe.who || '', title: oe.title || '', date: oe.date, yearly: !!oe.yearly, lead: oe.lead || 30, icon: oe.icon || '', err: '' }; S.sheet = { kind: 'occ' }; render(); }
       break;
     case 'col-open': S.colorOpen = S.colorOpen === v ? null : v; render(); break;
     case 'col-pick':
@@ -899,6 +905,7 @@ function onClick(e) {
       break;
     case 'occ-back': S.form = null; S.sheet = { kind: 'settings' }; render(); break;
     case 'o-type': f.type = v; f.err = ''; render(); break;
+    case 'o-icon': f.icon = v; render(); break;
     case 'o-who': f.who = f.who === v ? '' : v; f.err = ''; render(); break;
     case 'o-save': saveOcc(); break;
     case 'o-del':

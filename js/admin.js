@@ -8,7 +8,7 @@ import {
 } from './model.js';
 import { esc, pal, icon, logo, avatar, toast, autoUpdate, justUpdated, COLOR_CHOICES, PALETTE } from './ui.js';
 import { HOLIDAYS, TYPES, OTHER_ICONS, holidaySettings, upcoming, todays } from './occasions.js';
-import { weatherLoc, getWeather, searchPlaces, dayBadge } from './weather.js';
+import { weatherLoc, getWeather, searchPlaces, dayBadge, forecastHtml } from './weather.js';
 
 var store;
 var S = {
@@ -244,7 +244,7 @@ function renderWeek() {
   weekDays(S.weekMon).forEach(function (d, i) {
     var ds = ymd(d);
     var evs = eventsOn(S.events, ds);
-    h += '<div class="card' + (ds === td ? ' today' : '') + '"><div class="card-head"><b>' + DAY_NAMES[i] + ' <span>' + esc(shortDate(d)) + '</span></b>' + dayBadge(data, ds, 26) +
+    h += '<div class="card' + (ds === td ? ' today' : '') + '"><div class="card-head"><b>' + DAY_NAMES[i] + ' <span>' + esc(shortDate(d)) + '</span></b>' + (dayBadge(data, ds, 26) ? '<button class="wx-btn" data-a="wx-open" aria-label="Se ugens vejr">' + dayBadge(data, ds, 26) + '</button>' : '') +
       '<button class="iconbtn" data-a="new-ev" data-date="' + ds + '" aria-label="Tilføj aktivitet ' + DAY_NAMES[i] + '" style="margin:-10px -8px -10px 0">' + icon('plus', 20, 2.2) + '</button></div>' +
       todays(S.family, ds).map(function (o) { var m = o.who ? memberById(S.family, o.who) : null; return '<span class="occ-pill ' + o.kind + '"' + (m ? ' style="background:' + pal(m).color + '"' : '') + '>' + o.emoji + ' ' + esc(o.title) + '</span>'; }).join('') +
       '<button class="mealline' + (S.meals[ds] ? '' : ' empty') + '" data-a="tab" data-t="mad">' + icon('food', 16, 2) + esc(S.meals[ds] || 'Ingen aftensmad planlagt') + '</button>';
@@ -367,6 +367,7 @@ function renderSheet() {
   if (s.kind === 'bonus') { return renderBonus(); }
   if (s.kind === 'occ') { return renderOccForm(); }
   if (s.kind === 'rem') { return renderRemForm(); }
+  if (s.kind === 'wx') { var loc = weatherLoc(S.family); return sheetFrame('Vejret i ' + (loc ? loc.name : ''), forecastHtml(wx(), loc, false) || '<p class="muted">Vejrudsigten er ikke hentet endnu.</p>'); }
   return '';
 }
 
@@ -867,6 +868,7 @@ function onClick(e) {
       }
       break;
     case 'close-sheet': closeSheet(); break;
+    case 'wx-open': S.sheet = { kind: 'wx' }; render(); break;
     case 'logout': closeSheet(); S.onboard = null; store.signOut(); break;
     case 'google':
       S.busy = true; S.loginErr = ''; render();

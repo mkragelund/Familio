@@ -2,12 +2,12 @@
 // Stedet vælges i forældre-appen og gemmes på familien som settings.weather = { name, area, lat, lon }.
 // Udsigten gemmes i browseren og hentes igen hver halve time. Er nettet nede, vises den sidste udsigt.
 import { DEMO } from './store.js';
-import { ymd, addDays, today } from './model.js';
+import { ymd, addDays, today, parseYmd, pad, DAY_NAMES, MONTHS_SHORT } from './model.js';
 import { esc } from './ui.js';
 
 var FRESH = 30 * 60 * 1000;      // hent ny udsigt efter 30 min
 var RETRY = 5 * 60 * 1000;       // vent 5 min efter en fejl
-var LS_KEY = 'familio-weather';
+var LS_KEY = 'familio-weather-2';
 var mem = null;                   // { key, at, data }
 var inflight = false, lastTry = 0;
 
@@ -47,8 +47,9 @@ export function getWeather(loc, onUpdate) {
 function fetchForecast(loc) {
   var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + loc.lat + '&longitude=' + loc.lon +
     '&current=temperature_2m,weather_code,is_day' +
-    '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max' +
-    '&timezone=Europe%2FCopenhagen&past_days=7&forecast_days=10';
+    '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,wind_gusts_10m_max,sunrise,sunset' +
+    '&hourly=temperature_2m,weather_code,precipitation_probability,is_day' +
+    '&wind_speed_unit=ms&timezone=Europe%2FCopenhagen&past_days=7&forecast_days=10';
   return fetch(url).then(function (r) {
     if (!r.ok) { throw new Error('Vejret svarede ' + r.status); }
     return r.json();
@@ -58,11 +59,22 @@ function fetchForecast(loc) {
     (d.time || []).forEach(function (t, i) {
       days[t] = {
         code: d.weather_code[i], max: d.temperature_2m_max[i], min: d.temperature_2m_min[i],
-        rain: d.precipitation_probability_max ? d.precipitation_probability_max[i] : null
+        rain: d.precipitation_probability_max ? d.precipitation_probability_max[i] : null,
+        mm: d.precipitation_sum ? d.precipitation_sum[i] : null,
+        wind: d.wind_speed_10m_max ? d.wind_speed_10m_max[i] : null,
+        gust: d.wind_gusts_10m_max ? d.wind_gusts_10m_max[i] : null,
+        rise: d.sunrise ? String(d.sunrise[i]).slice(11, 16) : '',
+        set: d.sunset ? String(d.sunset[i]).slice(11, 16) : ''
       };
     });
+    // Time for time – kun fra i dag og to døgn frem (resten bruges ikke)
+    var hours = [], hh = j.hourly || {}, from = ymd(today());
+    (hh.time || []).forEach(function (t, i) {
+      if (t.slice(0, 10) < from || hours.length >= 48) { return; }
+      hours.push({ t: t, temp: hh.temperature_2m[i], code: hh.weather_code[i], rain: hh.precipitation_probability ? hh.precipitation_probability[i] : null, day: hh.is_day ? hh.is_day[i] !== 0 : true });
+    });
     var c = j.current || {};
-    return { cur: { t: c.temperature_2m, code: c.weather_code, day: c.is_day !== 0 }, days: days };
+    return { cur: { t: c.temperature_2m, code: c.weather_code, day: c.is_day !== 0 }, days: days, hours: hours };
   });
 }
 
@@ -199,9 +211,100 @@ function demoWeather() {
     var code = codes[n % codes.length];
     var max = 3 + (n * 5) % 7, min = max - 3 - (n % 3);
     var rain = code >= 51 ? 60 + (n * 13) % 35 : (n * 11) % 25;
-    days[ds] = { code: code, max: max, min: min, rain: rain };
+    var mm = code >= 51 ? Math.round((1 + (n * 7) % 9) * 10) / 10 : 0;
+    var wind = 3 + (n * 3) % 9;
+    days[ds] = { code: code, max: max, min: min, rain: rain, mm: mm, wind: wind, gust: wind + 4 + n % 5, rise: '07:5' + (n % 10), set: '15:4' + (n % 10) };
+  }
+  var hours = [];
+  for (var hI = 0; hI < 48; hI++) {
+    var dd = addDays(today(), Math.floor(hI / 24)), dw = days[ymd(dd)], hr = hI % 24;
+    var curve = Math.sin((hr - 8) / 24 * Math.PI * 2 - Math.PI / 2) * 0.5 + 0.5;
+    var hc = hr >= 10 && hr <= 15 ? dw.code : (dw.code >= 51 ? 3 : dw.code === 0 ? 1 : dw.code);
+    hours.push({ t: ymd(dd) + 'T' + pad(hr) + ':00', temp: dw.min + (dw.max - dw.min) * (1 - curve), code: hc, rain: dw.code >= 51 && hr >= 9 && hr <= 18 ? dw.rain : Math.round(dw.rain / 3), day: hr >= 8 && hr < 16 });
   }
   var td = days[ymd(today())];
   var h = new Date().getHours();
-  return { cur: { t: td.min + 2.3, code: td.code, day: h >= 7 && h < 17 }, days: days, demo: true };
+  return { cur: { t: td.min + 2.3, code: td.code, day: h >= 7 && h < 17 }, days: days, hours: hours, demo: true };
+}
+
+// ---------- Overblik over ugens vejr (tavlen og forældre-appen) ----------
+// Viser time for time resten af dagen og de næste 7 dage med regn, vind og temperatur.
+// big = tavlen (større tekst). Returnerer '' hvis der ikke er nogen udsigt.
+export function forecastHtml(data, loc, big) {
+  if (!data || !data.days) { return ''; }
+  var t0 = today(), ds0 = ymd(t0), now = new Date();
+  var list = [];
+  for (var i = 0; i < 7; i++) {
+    var d = addDays(t0, i), ds = ymd(d), w = data.days[ds];
+    if (w) { list.push({ d: d, ds: ds, w: w, i: i }); }
+  }
+  if (!list.length) { return ''; }
+  var lo = Math.min.apply(null, list.map(function (x) { return x.w.min; }));
+  var hi = Math.max.apply(null, list.map(function (x) { return x.w.max; }));
+  var span = Math.max(1, hi - lo);
+  var h = '<div class="fc' + (big ? ' big' : '') + '">';
+
+  // Time for time: fra nu og 12 timer frem, hver anden time på tavlen og hver tredje på telefonen
+  var hours = (data.hours || []).filter(function (x) { return new Date(x.t) >= new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()); });
+  var step = big ? 2 : 3, n = big ? 8 : 6, slots = [];
+  for (var k = 0; k < hours.length && slots.length < n; k += step) { slots.push(hours[k]); }
+  if (slots.length) {
+    h += '<div class="label">Resten af dagen</div><div class="fc-hours">';
+    slots.forEach(function (x, j) {
+      var hr = +x.t.slice(11, 13), other = x.t.slice(0, 10) !== ds0;
+      h += '<div class="fc-h' + (j === 0 ? ' now' : '') + '"><span class="tm">' + (j === 0 ? 'Nu' : (other && hr < step ? 'I morgen ' : '') + pad(hr)) + '</span>' +
+        wxIcon(x.code, big ? 34 : 32, !x.day, wxText(x.code)) + '<b>' + deg(x.temp) + '</b>' +
+        '<span class="rn' + (x.rain >= 50 ? ' wet' : '') + '">' + (typeof x.rain === 'number' && x.rain >= 10 ? drop() + Math.round(x.rain) + '%' : '&nbsp;') + '</span></div>';
+    });
+    h += '</div>';
+  }
+
+  // Godt at vide – korte råd, som børnene kan forstå
+  var tips = adviceFor(list);
+  if (tips.length) {
+    h += '<div class="fc-tips">' + tips.map(function (t) { return '<span class="tip">' + t + '</span>'; }).join('') + '</div>';
+  }
+
+  // De næste 7 dage
+  h += '<div class="label">De næste 7 dage</div><div class="fc-days">';
+  list.forEach(function (x) {
+    var w = x.w, name = x.i === 0 ? 'I dag' : x.i === 1 ? 'I morgen' : DAY_NAMES[(x.d.getDay() + 6) % 7];
+    var left = (w.min - lo) / span * 100, width = Math.max(6, (w.max - w.min) / span * 100);
+    h += '<div class="fc-d' + (x.i === 0 ? ' today' : '') + '">' +
+      '<div class="dn"><b>' + esc(name) + '</b><span>' + x.d.getDate() + '. ' + MONTHS_SHORT[x.d.getMonth()] + '</span></div>' +
+      wxIcon(w.code, big ? 40 : 34, false, wxText(w.code)) +
+      '<div class="tx"><b>' + esc(wxText(w.code)) + '</b><span>' +
+        (typeof w.rain === 'number' ? '<i class="' + (w.rain >= 50 ? 'wet' : '') + '">' + drop() + Math.round(w.rain) + '%' + (w.mm >= 0.5 ? ' · ' + fmtMm(w.mm) : '') + '</i>' : '') +
+        (typeof w.wind === 'number' ? '<i>' + windIc() + Math.round(w.wind) + (typeof w.gust === 'number' && w.gust - w.wind >= 5 ? ' (' + Math.round(w.gust) + ')' : '') + ' m/s</i>' : '') +
+      '</span></div>' +
+      '<div class="tr"><span class="mn">' + deg(w.min) + '</span><span class="bar"><i style="left:' + left.toFixed(1) + '%;width:' + Math.min(100 - left, width).toFixed(1) + '%"></i></span><span class="mx">' + deg(w.max) + '</span></div>' +
+      '</div>';
+  });
+  h += '</div>';
+  var tw = data.days[ds0];
+  h += '<div class="fc-foot">' + (tw && tw.rise ? sunIc() + 'Solen står op ' + tw.rise.replace(':', '.') + ' og går ned ' + tw.set.replace(':', '.') + ' · ' : '') +
+    'Vejret i ' + esc(loc ? loc.name : '') + ' fra Open-Meteo' + (data.demo ? ' (demo)' : '') + '</div>';
+  return h + '</div>';
+}
+
+function fmtMm(mm) { return (Math.round(mm * 10) / 10).toString().replace('.', ',') + ' mm'; }
+function drop() { return '<svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><path fill="#2F6FDE" d="M12 2.5l5.5 7.5a7 7 0 1 1-11 0z"/></svg>'; }
+function windIc() { return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h8"/></svg>'; }
+function sunIc() { return '<svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">' + sun(16, 16, 6.5) + '</svg>'; }
+
+function dayWord(x) { return x.i === 0 ? 'i dag' : x.i === 1 ? 'i morgen' : DAY_NAMES[(x.d.getDay() + 6) % 7].toLowerCase(); }
+function joinWords(a) { return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' og ' + a[a.length - 1]; }
+function adviceFor(list) {
+  var tips = [];
+  var wet = list.filter(function (x) { return x.i < 5 && x.w.rain >= 60 && x.w.code >= 51 && x.w.code < 71; }).map(dayWord);
+  if (wet.length) { tips.push('☔ Regntøj ' + joinWords(wet.slice(0, 3))); }
+  var snow = list.filter(function (x) { return x.i < 5 && ((x.w.code >= 71 && x.w.code <= 77) || x.w.code === 85 || x.w.code === 86); }).map(dayWord);
+  if (snow.length) { tips.push('❄️ Sne ' + joinWords(snow.slice(0, 3))); }
+  var cold = list.filter(function (x) { return x.i < 3 && x.w.min <= 0; }).map(dayWord);
+  if (cold.length) { tips.push('🧤 Frost ' + joinWords(cold) + ' – hue og vanter'); }
+  var windy = list.filter(function (x) { return x.i < 3 && x.w.wind >= 10; }).map(dayWord);
+  if (windy.length) { tips.push('💨 Blæsende ' + joinWords(windy)); }
+  var best = list.filter(function (x) { return x.i > 0 && x.w.code <= 2 && x.w.rain < 30; })[0];
+  if (best && tips.length < 3) { tips.push('☀️ Tørt og lyst ' + dayWord(best)); }
+  return tips.slice(0, 3);
 }

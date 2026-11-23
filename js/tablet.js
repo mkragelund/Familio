@@ -9,7 +9,7 @@ import { esc, pal, icon, logo, avatar, confettiHtml, pick, autoUpdate, justUpdat
 import { APP_VERSION } from './config.js';
 import { play, unlockAudio } from './sound.js';
 import { countdowns, todays, countdownText, candleDay, candleSvg, wreathSvg, adventLit, holidaySettings, occArt } from './occasions.js';
-import { weatherLoc, getWeather, dayWeather, wxIcon, wxText, deg, dayBadge } from './weather.js';
+import { weatherLoc, getWeather, dayWeather, wxIcon, wxText, deg, dayBadge, forecastHtml } from './weather.js';
 function sfx(name) { play(name, S.family && S.family.settings, S.dimShown); }
 // Vejrudsigten for familiens sted (null hvis intet sted er valgt). Ny udsigt → tegn igen.
 function wx() { return getWeather(weatherLoc(S.family), function () { render(); }); }
@@ -310,10 +310,10 @@ function renderTodayWx() {
   var c = data.cur || {};
   var code = typeof c.code === 'number' ? c.code : w.code;
   var loc = weatherLoc(S.family);
-  return '<div class="tb-wx" aria-label="Dagens vejr i ' + esc(loc.name) + '">' + wxIcon(code, 52, c.day === false) +
+  return '<button class="tb-wx" data-a="wxopen" aria-label="Dagens vejr i ' + esc(loc.name) + ' – tryk for ugens vejr">' + wxIcon(code, 52, c.day === false) +
     '<div class="wx-txt"><span class="label">Dagens vejr · ' + esc(loc.name) + '</span>' +
     '<div class="wx-now"><b>' + deg(typeof c.t === 'number' ? c.t : w.max) + '</b><span>' + esc(wxText(code)) + '</span></div>' +
-    '<div class="wx-range">' + deg(w.max) + ' / ' + deg(w.min) + (typeof w.rain === 'number' ? ' · ' + rainDrop() + Math.round(w.rain) + '%' : '') + '</div></div></div>';
+    '<div class="wx-range">' + deg(w.max) + ' / ' + deg(w.min) + (typeof w.rain === 'number' ? ' · ' + rainDrop() + Math.round(w.rain) + '%' : '') + '</div></div><span class="wx-more" aria-hidden="true">›</span></button>';
 }
 function rainDrop() { return '<svg width="11" height="11" viewBox="0 0 24 24" aria-label="Regnrisiko" role="img"><path fill="#2F6FDE" d="M12 2.5l5.5 7.5a7 7 0 1 1-11 0z"/></svg>'; }
 
@@ -736,7 +736,7 @@ function snowHtml() {
 function renderPanel() {
   var pn = S.panel;
   if (!pn || !S.family) { panelEl.innerHTML = ''; return; }
-  panelEl.innerHTML = '<div class="overlay" data-a="panel-bg">' + (pn.kind === 'kid' ? kidPanel(pn.kid) : packPanel(pn.date, pn.ev)) + '</div>';
+  panelEl.innerHTML = '<div class="overlay" data-a="panel-bg">' + (pn.kind === 'kid' ? kidPanel(pn.kid) : pn.kind === 'wx' ? wxPanel() : packPanel(pn.date, pn.ev)) + '</div>';
 }
 
 function kidPanel(kidId) {
@@ -777,6 +777,13 @@ function kidPanel(kidId) {
     h += '</div>';
   }
   return h + '</div>';
+}
+
+function wxPanel() {
+  var loc = weatherLoc(S.family), body = forecastHtml(wx(), loc, true);
+  return '<div class="panel-card wx-panel" role="dialog" aria-modal="true" aria-label="Ugens vejr">' +
+    '<div class="panel-top"><b class="display" style="font-size:30px;flex:1">Vejret i ' + esc(loc ? loc.name : '') + '</b>' +
+    '<button class="btn secondary" data-a="panel-close">Luk</button></div>' + (body || '<p class="muted">Vejrudsigten er ikke hentet endnu.</p>') + '</div>';
 }
 
 function packPanel(ds, evId) {
@@ -878,6 +885,7 @@ function onClick(e) {
   else if (a === 'day') { S.selDay = el.getAttribute('data-date'); render(); }
   else if (a === 'goday') { S.selDay = el.getAttribute('data-date'); S.view = 'pligter'; render(); }
   else if (a === 'kid') { S.panel = { kind: 'kid', kid: el.getAttribute('data-kid') }; renderPanel(); }
+  else if (a === 'wxopen') { S.panel = { kind: 'wx' }; renderPanel(); }
   else if (a === 'packopen') { S.panel = { kind: 'pack', date: el.getAttribute('data-date'), ev: el.getAttribute('data-ev') }; renderPanel(); }
   else if (a === 'panel-close') { S.panel = null; renderPanel(); }
   else if (a === 'panel-bg') { if (e.target === el) { S.panel = null; renderPanel(); } }

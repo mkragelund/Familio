@@ -245,16 +245,20 @@ function render() {
     return;
   }
   var mon = mondayOf(parseYmd(S.day));
+  var bmon = boardMon();
   var html = '';
   if (DEMO) { html += '<div class="demo-band">DEMO – data gemmes kun i denne browser. <button data-a="demo-reset">Nulstil demo</button></div>'; }
   html += '<div class="tb"' + (DEMO ? ' style="height:calc(100vh - 30px)"' : '') + '>';
-  html += renderHead(mon);
+  // Uge, Madplan og Aktiviteter kan vise næste uge, når en forælder har skiftet uge.
+  // I dag og Pligter bliver altid på den rigtige dag, så børnene stadig kan krydse af.
+  var showNext = S.view === 'uge' || S.view === 'mad' || S.view === 'akt';
+  html += renderHead(showNext ? bmon : mon);
   html += '<main class="tb-main">';
   if (S.view === 'dag') { html += renderDay(); }
-  else if (S.view === 'uge') { html += renderWeek(mon); }
-  else if (S.view === 'mad') { html += renderMeals(mon); }
+  else if (S.view === 'uge') { html += renderWeek(bmon); }
+  else if (S.view === 'mad') { html += renderMeals(bmon); }
   else if (S.view === 'pligter') { html += renderChores(mon); }
-  else { html += renderActs(mon); }
+  else { html += renderActs(bmon); }
   html += '</main>';
   html += renderNav();
   html += '</div>';
@@ -288,10 +292,19 @@ function renderPairing() {
     '<p class="muted">Siden opdaterer automatisk, når den er godkendt.</p></div>';
 }
 
+// Den uge tavlen viser. En forælder kan skifte til næste uge før tid (fx søndag aften).
+// Valget gælder kun den kommende uge; når den uge er begyndt, er alt som normalt igen.
+function boardMon() {
+  var cur = mondayOf(parseYmd(S.day));
+  var bw = S.family && S.family.settings && S.family.settings.boardWeek;
+  return bw && bw === ymd(addDays(cur, 7)) ? parseYmd(bw) : cur;
+}
+
 function renderHead(mon) {
+  var ahead = ymd(mon) > S.day;
   var h = '<header class="tb-head"><div class="tb-brand">' + logo(52) + '<div>' +
     '<div class="name"><b>Familio</b><span>· ' + esc((S.family.name || '').toUpperCase()) + '</span><em class="ver">v' + esc(APP_VERSION) + '</em></div>' +
-    '<div class="tb-week"><span class="w">Uge ' + isoWeek(mon) + '</span><span class="r">' + esc(weekRangeLabel(mon)) + '</span></div>' +
+    '<div class="tb-week"><span class="w">Uge ' + isoWeek(mon) + '</span>' + (ahead ? '<span class="tag-next">NÆSTE UGE</span>' : '<span class="r">' + esc(weekRangeLabel(mon)) + '</span>') + '</div>' +
     '</div></div>' + renderTodayWx() + '<div class="tb-kids">';
   var mName = MONTHS_SHORT[parseYmd(S.day).getMonth()];
   kids().forEach(function (k) {

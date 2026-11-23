@@ -171,6 +171,27 @@ DemoStore.prototype.seed = function () {
   [['daek', ida, 5], ['laes', jc, 10]].forEach(function (c) {
     self.docs[F + '/completions/' + completionId(t, c[0], c[1])] = { date: t, chore: c[0], kid: c[1], pts: c[2], at: Date.now() - 3600000 };
   });
+  // Historik: de seneste 4 uger, så "Tidligere uger" har noget at vise
+  var seedN = 7;
+  function rnd() { seedN++; var x = Math.sin(seedN * 12.9898) * 43758.5453; return x - Math.floor(x); }
+  var plan = [[jc, 0.85, ida, 0.9], [jc, 0.55, ida, 0.95], [jc, 0.9, ida, 0.6], [jc, 0.75, ida, 0.8]];
+  plan.forEach(function (row, wi) {
+    var wmon = addDays(mon, -7 * (wi + 1));
+    [[row[0], row[1]], [row[2], row[3]]].forEach(function (kr) {
+      fam.chores.forEach(function (c) {
+        if ((c.kids || []).indexOf(kr[0]) < 0) { return; }
+        var daily = c.kids.length === 1;
+        for (var di = 0; di < 7; di++) {
+          if (rnd() > (daily ? kr[1] : kr[1] * 0.22)) { continue; }
+          var ds = ymd(addDays(wmon, di));
+          self.docs[F + '/completions/' + completionId(ds, c.id, kr[0])] = { date: ds, chore: c.id, kid: kr[0], pts: c.pts, at: addDays(wmon, di).getTime() + 18 * 3600000 };
+        }
+      });
+    });
+  });
+  var bmon = addDays(mon, -7);
+  self.docs[F + '/adjustments/demo-b1'] = { date: ymd(addDays(bmon, 2)), kid: ida, pts: 10, reason: 'Hjalp med indkøb', kind: 'bonus', byName: 'Mor', at: addDays(bmon, 2).getTime() + 17 * 3600000 };
+  self.docs[F + '/adjustments/demo-b2'] = { date: ymd(addDays(bmon, 5)), kid: jc, pts: 5, reason: 'Ryddede op uden at blive bedt om det', kind: 'bonus', byName: 'Far', at: addDays(bmon, 5).getTime() + 12 * 3600000 };
   this.save();
 };
 DemoStore.prototype.reset = function () { this.seed(); this.notify(); };

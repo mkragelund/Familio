@@ -11,6 +11,7 @@ import { HOLIDAYS, TYPES, OTHER_ICONS, holidaySettings, upcoming, todays } from 
 import { weatherLoc, getWeather, searchPlaces, dayBadge } from './weather.js';
 
 var store;
+var HISTORY_WEEKS = 8;
 var S = {
   fid: null, userDoc: null, onboard: null, invite: null,
   user: null, authReady: false, family: null, famState: 'loading', events: [], meals: {}, completions: [], adjustments: [], pairing: [],
@@ -107,7 +108,9 @@ function subscribeData() {
   unsubs.forEach(function (u) { u(); }); unsubs = [];
   var t = today();
   var prevMonth = ymd(new Date(t.getFullYear(), t.getMonth() - 1, 1));
-  var from = ymd(addDays(mondayOf(t), -7)) < prevMonth ? ymd(addDays(mondayOf(t), -7)) : prevMonth;
+  // 8 uger tilbage (til "Tidligere uger") eller fra 1. i sidste måned, hvis det er tidligere
+  var back = ymd(addDays(mondayOf(t), -7 * HISTORY_WEEKS));
+  var from = back < prevMonth ? back : prevMonth;
   unsubs.push(fs.watchColl('events', null, function (l) { S.events = l; render(); }));
   unsubs.push(fs.watchColl('completions', ['date', '>=', from], function (l) { S.completions = l; render(); }));
   unsubs.push(fs.watchColl('adjustments', ['date', '>=', from], function (l) { S.adjustments = l; render(); }));
@@ -287,6 +290,8 @@ function renderPoints() {
   });
   h += '</div>';
 
+  h += renderHistory();
+
   // Seneste registreringer
   var log = S.completions.map(function (c) { return { kind: 'c', o: c, at: c.at || 0 }; })
     .concat(S.adjustments.map(function (a) { return { kind: 'a', o: a, at: a.at || 0 }; }))
@@ -328,6 +333,95 @@ function renderPoints() {
   return h;
 }
 
+// ---------- Tidligere uger ----------
+function weekStats(kid, mon) {
+  var from = ymd(mon), to = ymd(addDays(mon, 6));
+  var g = (S.family.goals && S.family.goals[kid]) || {};
+  var goal = +g.weekPts || 0;
+  var pts = sumPoints(S.completions, S.adjustments, kid, from, to);
+  var chores = {}, bonus = 0, fix = 0, bonusList = [];
+  S.completions.forEach(function (c) {
+    if (c.kid !== kid || c.date < from || c.date > to) { return; }
+    var o = chores[c.chore] || (chores[c.chore] = { id: c.chore, n: 0, pts: 0, days: {} });
+    o.n++; o.pts += +c.pts || 0; o.days[c.date] = true;
+  });
+  S.adjustments.forEach(function (a) {
+    if (a.kid !== kid || a.date < from || a.date > to) { return; }
+    if ((+a.pts || 0) > 0) { bonus += +a.pts; bonusList.push(a); } else { fix += +a.pts || 0; }
+  });
+  return { pts: pts, goal: goal, reached: goal > 0 && pts >= goal, chores: chores, bonus: bonus, fix: fix, bonusList: bonusList };
+}
+
+function weekName(mon) {
+  var cur = mondayOf(today());
+  var diff = Math.round((cur - mon) / (7 * 86400000));
+  if (diff === 1) { return 'Sidste uge'; }
+  if (diff === 2) { return 'Forrige uge'; }
+  return 'Uge ' + isoWeek(mon);
+}
+
+function renderHistory() {
+  var cur = mondayOf(today());
+  var kids = kidsOf(S.family);
+  var h = '<div class="section"><span class="label">Tidligere uger</span><div class="hist">';
+  for (var i = 1; i <= 4; i++) {
+    var mon = addDays(cur, -7 * i);
+    h += '<button class="histweek" data-a="hist" data-v="' + ymd(mon) + '"><div class="hw-head"><b>' + esc(weekName(mon)) + '</b><span>' + (/^Uge/.test(weekName(mon)) ? '' : 'Uge ' + isoWeek(mon) + ' · ') + esc(weekRangeLabel(mon)) + '</span>' + icon('right', 18, 2.2) + '</div>';
+    kids.forEach(function (k) {
+      var p = pal(k), st = weekStats(k.id, mon);
+      var w = st.goal ? Math.min(100, Math.round(st.pts / st.goal * 100)) : 0;
+      h += '<div class="hw-kid"><span class="hw-name">' + esc(k.name.split(' ')[0]) + '</span><span class="bar"><i style="width:' + w + '%;background:' + p.color + '"></i></span>' +
+        '<span class="hw-pts">' + st.pts + '<small> / ' + st.goal + '</small></span>' +
+        (st.reached ? '<span class="hw-ok" aria-label="Ugemål nået">✓</span>' : '<span class="hw-ok no" aria-label="Ugemål ikke nået"></span>') + '</div>';
+    });
+    h += '</button>';
+  }
+  h += '</div></div>';
+  return h;
+}
+
+function renderHistorySheet() {
+  var mon = parseYmd(S.sheet.mon);
+  var cur = mondayOf(today());
+  var older = ymd(addDays(mon, -7)) >= ymd(addDays(cur, -7 * HISTORY_WEEKS));
+  var newer = ymd(addDays(mon, 7)) < ymd(cur);
+  var b = '<div class="weeknav"><button class="iconbtn" data-a="hist" data-v="' + ymd(addDays(mon, -7)) + '"' + (older ? '' : ' disabled') + ' aria-label="Ugen før">' + icon('left', 20, 2.2) + '</button>' +
+    '<div class="mid"><b>' + esc(weekName(mon)) + '</b><span>Uge ' + isoWeek(mon) + ' · ' + esc(weekRangeLabel(mon)) + '</span></div>' +
+    '<button class="iconbtn" data-a="hist" data-v="' + ymd(addDays(mon, 7)) + '"' + (newer ? '' : ' disabled') + ' aria-label="Ugen efter">' + icon('right', 20, 2.2) + '</button></div>';
+  var days = weekDays(mon).map(ymd);
+  kidsOf(S.family).forEach(function (k) {
+    var p = pal(k), st = weekStats(k.id, mon);
+    var w = st.goal ? Math.min(100, Math.round(st.pts / st.goal * 100)) : 0;
+    var g = (S.family.goals && S.family.goals[k.id]) || {};
+    b += '<div class="card hist-card"><div class="hc-top" style="background:' + p.tint + ';color:' + p.text + '"><div><b>' + esc(k.name) + '</b>' +
+      '<span>' + (st.reached ? 'Ugemålet er nået' + (g.weekReward ? ' · ' + esc(g.weekReward) : '') : (st.goal ? 'Manglede ' + (st.goal - st.pts) + ' point' : '')) + '</span></div>' +
+      '<span class="big">' + st.pts + '<small> / ' + st.goal + '</small></span></div>' +
+      '<span class="bar big" style="margin:0 14px"><i style="width:' + w + '%;background:' + p.color + '"></i></span>';
+    // Pligter for barnet (også dem der ikke blev lavet)
+    var mine = (S.family.chores || []).filter(function (c) { return (c.kids || []).indexOf(k.id) >= 0; });
+    var ids = mine.map(function (c) { return c.id; });
+    Object.keys(st.chores).forEach(function (id) { if (ids.indexOf(id) < 0) { ids.push(id); } });
+    b += '<div class="hc-rows">';
+    ids.forEach(function (id) {
+      var c = (S.family.chores || []).filter(function (x) { return x.id === id; })[0] || { id: id, label: id, icon: 'star' };
+      var o = st.chores[id] || { n: 0, pts: 0, days: {} };
+      var daily = (c.kids || []).length === 1;
+      b += '<div class="hc-row' + (o.n ? '' : ' none') + '"><span class="ic">' + icon(c.icon || 'star', 20, 2) + '</span><span class="grow">' + esc(c.label) + '</span>';
+      if (daily) {
+        b += '<span class="ticks">' + days.map(function (d, i) { return '<i class="' + (o.days[d] ? 'on' : '') + '" style="' + (o.days[d] ? 'background:' + p.color : '') + '">' + DAY_2[i].charAt(0) + '</i>'; }).join('') + '</span>';
+      } else {
+        b += '<span class="n">' + (o.n ? o.n + '×' : 'ikke lavet') + '</span>';
+      }
+      b += '<span class="p">' + (o.pts || '') + '</span></div>';
+    });
+    if (st.bonus) { b += '<div class="hc-row"><span class="ic">' + icon('trophy', 20, 2) + '</span><span class="grow">Bonus' + (st.bonusList.length ? '<small>' + esc(st.bonusList.map(function (a) { return a.reason || ''; }).filter(Boolean).join(', ')) + '</small>' : '') + '</span><span class="p">+' + st.bonus + '</span></div>'; }
+    if (st.fix) { b += '<div class="hc-row"><span class="ic">' + icon('pencil', 20, 2) + '</span><span class="grow">Rettelser</span><span class="p">' + st.fix + '</span></div>'; }
+    b += '</div></div>';
+  });
+  b += '<p class="hint">Pointene er dem, der blev givet i ugen. Ugemålet er det, der gælder nu.</p>';
+  return sheetFrame('Ugens point', b);
+}
+
 function choreLabel(id) {
   var c = (S.family.chores || []).filter(function (x) { return x.id === id; })[0];
   return c ? c.label : id;
@@ -367,6 +461,7 @@ function renderSheet() {
   if (s.kind === 'bonus') { return renderBonus(); }
   if (s.kind === 'occ') { return renderOccForm(); }
   if (s.kind === 'rem') { return renderRemForm(); }
+  if (s.kind === 'hist') { return renderHistorySheet(); }
   return '';
 }
 
@@ -846,6 +941,7 @@ function onClick(e) {
   if (el.tagName === 'BUTTON' && el.type !== 'submit') { e.preventDefault(); }
   var f = S.form;
   switch (a) {
+    case 'hist': S.sheet = { kind: 'hist', mon: v }; render(); break;
     case 'tab': S.tab = el.getAttribute('data-t'); window.scrollTo(0, 0); render(); break;
     case 'week':
       var d = +el.getAttribute('data-d');

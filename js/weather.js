@@ -230,7 +230,8 @@ function demoWeather() {
 // ---------- Overblik over ugens vejr (tavlen og forældre-appen) ----------
 // Viser time for time resten af dagen og de næste 7 dage med regn, vind og temperatur.
 // big = tavlen (større tekst). Returnerer '' hvis der ikke er nogen udsigt.
-export function forecastHtml(data, loc, big) {
+// tipState(ds, title) → 'add' (kan sættes i kalenderen), 'done' (står der allerede) eller null (kun tekst).
+export function forecastHtml(data, loc, big, tipState) {
   if (!data || !data.days) { return ''; }
   var t0 = today(), ds0 = ymd(t0), now = new Date();
   var list = [];
@@ -262,7 +263,14 @@ export function forecastHtml(data, loc, big) {
   // Godt at vide – korte råd, som børnene kan forstå
   var tips = adviceFor(list);
   if (tips.length) {
-    h += '<div class="fc-tips">' + tips.map(function (t) { return '<span class="tip">' + t + '</span>'; }).join('') + '</div>';
+    var canAdd = false;
+    h += '<div class="fc-tips">' + tips.map(function (t) {
+      var st = t.title && tipState ? tipState(t.ds, t.title) : null;
+      if (st === 'add') { canAdd = true; return '<button class="tip add" data-a="wx-tip" data-date="' + t.ds + '" data-title="' + esc(t.title) + '">' + esc(t.text) + '<span class="plus">+</span></button>'; }
+      if (st === 'done') { return '<span class="tip done">' + esc(t.text) + '<span class="plus">✓</span></span>'; }
+      return '<span class="tip">' + esc(t.text) + '</span>';
+    }).join('') + '</div>';
+    if (canAdd) { h += '<div class="fc-hint">Tryk på et råd for at sætte det i kalenderen, så det står på tavlen den dag.</div>'; }
   }
 
   // De næste 7 dage
@@ -293,18 +301,18 @@ function windIc() { return '<svg width="13" height="13" viewBox="0 0 24 24" fill
 function sunIc() { return '<svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">' + sun(16, 16, 6.5) + '</svg>'; }
 
 function dayWord(x) { return x.i === 0 ? 'i dag' : x.i === 1 ? 'i morgen' : DAY_NAMES[(x.d.getDay() + 6) % 7].toLowerCase(); }
-function joinWords(a) { return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' og ' + a[a.length - 1]; }
+// Korte råd pr. dag. title = teksten der sættes i kalenderen, hvis en forælder trykker på rådet.
 function adviceFor(list) {
   var tips = [];
-  var wet = list.filter(function (x) { return x.i < 5 && x.w.rain >= 60 && x.w.code >= 51 && x.w.code < 71; }).map(dayWord);
-  if (wet.length) { tips.push('☔ Regntøj ' + joinWords(wet.slice(0, 3))); }
-  var snow = list.filter(function (x) { return x.i < 5 && ((x.w.code >= 71 && x.w.code <= 77) || x.w.code === 85 || x.w.code === 86); }).map(dayWord);
-  if (snow.length) { tips.push('❄️ Sne ' + joinWords(snow.slice(0, 3))); }
-  var cold = list.filter(function (x) { return x.i < 3 && x.w.min <= 0; }).map(dayWord);
-  if (cold.length) { tips.push('🧤 Frost ' + joinWords(cold) + ' – hue og vanter'); }
-  var windy = list.filter(function (x) { return x.i < 3 && x.w.wind >= 10; }).map(dayWord);
-  if (windy.length) { tips.push('💨 Blæsende ' + joinWords(windy)); }
+  list.forEach(function (x) {
+    var w = x.w, c = w.code;
+    if (x.i < 5 && w.rain >= 60 && c >= 51 && c < 71) { tips.push({ ds: x.ds, text: '☔ Regntøj ' + dayWord(x), title: 'Husk regntøj' }); }
+    if (x.i < 5 && ((c >= 71 && c <= 77) || c === 85 || c === 86)) { tips.push({ ds: x.ds, text: '❄️ Sne ' + dayWord(x), title: 'Husk flyverdragt og støvler' }); }
+    if (x.i < 3 && w.min <= 0) { tips.push({ ds: x.ds, text: '🧤 Frost ' + dayWord(x) + ' – hue og vanter', title: 'Husk hue og vanter' }); }
+    if (x.i < 3 && w.wind >= 10) { tips.push({ ds: x.ds, text: '💨 Blæsende ' + dayWord(x), title: '' }); }
+  });
+  tips = tips.slice(0, 4);
   var best = list.filter(function (x) { return x.i > 0 && x.w.code <= 2 && x.w.rain < 30; })[0];
-  if (best && tips.length < 3) { tips.push('☀️ Tørt og lyst ' + dayWord(best)); }
-  return tips.slice(0, 3);
+  if (best && tips.length < 4) { tips.push({ ds: best.ds, text: '☀️ Tørt og lyst ' + dayWord(best), title: '' }); }
+  return tips;
 }

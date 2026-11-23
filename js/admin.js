@@ -476,9 +476,14 @@ function renderSheet() {
   if (s.kind === 'bonus') { return renderBonus(); }
   if (s.kind === 'occ') { return renderOccForm(); }
   if (s.kind === 'rem') { return renderRemForm(); }
-  if (s.kind === 'wx') { var loc = weatherLoc(S.family); return sheetFrame('Vejret i ' + (loc ? loc.name : ''), forecastHtml(wx(), loc, false) || '<p class="muted">Vejrudsigten er ikke hentet endnu.</p>'); }
+  if (s.kind === 'wx') { var loc = weatherLoc(S.family); return sheetFrame('Vejret i ' + (loc ? loc.name : ''), forecastHtml(wx(), loc, false, tipState) || '<p class="muted">Vejrudsigten er ikke hentet endnu.</p>'); }
   if (s.kind === 'hist') { return renderHistorySheet(); }
   return '';
+}
+
+// Står vejr-rådet allerede i kalenderen den dag?
+function tipState(ds, title) {
+  return eventsOn(S.events, ds).some(function (o) { return (o.ev.title || '').toLowerCase() === title.toLowerCase(); }) ? 'done' : 'add';
 }
 
 function findEvent(id) { return S.events.filter(function (e) { return e.id === id; })[0]; }
@@ -987,6 +992,13 @@ function onClick(e) {
       break;
     case 'close-sheet': closeSheet(); break;
     case 'wx-open': S.sheet = { kind: 'wx' }; render(); break;
+    case 'wx-tip':
+      // Åbn "Ny aktivitet" udfyldt: hele dagen, hele familien, på dagen for rådet. Tilbage = vejret.
+      S.form = blankForm(el.getAttribute('data-date'));
+      S.form.title = el.getAttribute('data-title'); S.form.who = 'fam'; S.form.allDay = true;
+      S.sheet = { kind: 'form', back: { kind: 'wx' } }; render();
+      var sbx = document.querySelector('.sheet-body'); if (sbx) { sbx.scrollTop = 0; }
+      break;
     case 'logout': closeSheet(); S.onboard = null; store.signOut(); break;
     case 'google':
       S.busy = true; S.loginErr = ''; render();
@@ -1227,7 +1239,7 @@ function saveEvent() {
   var id = f.id || newId();
   fs.set('events/' + id, ev).then(function () {
     toast(f.id ? 'Ændringer gemt' : 'Aktiviteten er gemt');
-    S.sheet = null; S.form = null; render();
+    S.sheet = (S.sheet && S.sheet.back) || null; S.form = null; render();
   }).catch(fail);
 }
 

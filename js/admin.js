@@ -853,7 +853,7 @@ function renderSettings() {
   return sheetFrame('Indstillinger', b, '');
 }
 
-var ICON_CHOICES = ['daek', 'tag', 'opvask', 'vaer', 'stoev', 'laes', 'oejen', 'star', 'bag'];
+var ICON_CHOICES = ['daek', 'tag', 'opvask', 'vaer', 'stoev', 'laes', 'oejen', 'sko', 'jakke', 'star', 'bag'];
 
 function renderChoreForm() {
   var f = S.form;

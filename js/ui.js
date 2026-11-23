@@ -56,7 +56,9 @@ var P = {
   copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
   trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-  bag: '<path d="M6 7h12l1 14H5z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/>'
+  bag: '<path d="M6 7h12l1 14H5z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/>',
+  sko: '<path d="M3 6h4.5l1.5 4h2.5l1.5 2c3 .5 6.5 1.5 8 3.5V19H3z"/><path d="M3 16h18"/><path d="M9.5 13l1.5-1M12 14.3l1.5-1"/>',
+  jakke: '<path d="M8.5 5a3.5 3.5 0 0 1 7 0"/><path d="M8.5 5L5 6.5 3 13l3 .5V21h12v-7.5l3-.5-2-6.5L15.5 5"/><path d="M12 8.5V21M8.5 16.5h1.5M14 16.5h1.5"/>'
 };
 
 export function icon(name, size, sw, label) {

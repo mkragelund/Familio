@@ -237,10 +237,25 @@ function evRow(o, ds) {
     '<span class="r">' + esc(o.cancelled ? '' : timeLabel(o.ev)) + (o.ev.type === 'once' ? ' <span class="pill" style="background:rgba(255,255,255,.7)">ÉN GANG</span>' : icon('repeat', 14, 2.2, 'Gentages')) + '</span></button>';
 }
 
+// Skift uge på tavlen: forældre kan vise næste uge på tavlen før tid (fx søndag aften).
+function boardAhead() {
+  var next = ymd(addDays(mondayOf(today()), 7));
+  return ((S.family.settings || {}).boardWeek === next) ? next : '';
+}
+function renderBoardWeek() {
+  var cur = mondayOf(today()), next = addDays(cur, 7);
+  var on = !!boardAhead();
+  return '<div class="boardrow' + (on ? ' on' : '') + '"><span class="bi">' + icon('calendar', 22, 2) + '</span><div class="bt">' +
+    (on ? '<b>Tavlen viser uge ' + isoWeek(next) + '</b><span>Næste uge vises allerede nu. Fra mandag kører alt som normalt.</span>'
+        : '<b>Tavlen viser uge ' + isoWeek(cur) + '</b><span>Skift tavlen til næste uge før tid.</span>') +
+    '</div><button class="btn' + (on ? ' secondary' : '') + '" data-a="board-week" data-on="' + (on ? '0' : '1') + '">' + (on ? 'Fortryd' : 'Vis uge ' + isoWeek(next)) + '</button></div>';
+}
+
 function renderWeek() {
   var h = renderTop('Familio', S.family.name || '', true) + '<div class="ad-body">';
   var td = ymd(today());
   var data = wx();
+  h += renderBoardWeek();
   weekDays(S.weekMon).forEach(function (d, i) {
     var ds = ymd(d);
     var evs = eventsOn(S.events, ds);
@@ -851,6 +866,13 @@ function onClick(e) {
       var d = +el.getAttribute('data-d');
       S.weekMon = d === 0 ? mondayOf(today()) : addDays(S.weekMon, 7 * d);
       watchMeals(); render(); break;
+    case 'board-week':
+      var bon = el.getAttribute('data-on') === '1', bnext = addDays(mondayOf(today()), 7);
+      fs.update('', { 'settings.boardWeek': bon ? ymd(bnext) : '' }).then(function () {
+        toast(bon ? 'Tavlen viser nu uge ' + isoWeek(bnext) : 'Tavlen viser denne uge igen');
+      }).catch(fail);
+      if (bon) { S.weekMon = bnext; watchMeals(); render(); }
+      break;
     case 'settings': S.invite = null; S.wxSearch = null; S.sheet = { kind: 'settings' }; render(); break;
     case 'wx-change': S.wxSearch = { open: true }; render(); break;
     case 'wx-cancel': S.wxSearch = null; render(); break;

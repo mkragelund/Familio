@@ -15,4 +15,4 @@ export const FIREBASE_CONFIG = {
 // Navnet på Familios egen Firestore-database i projektet (ikke "(default)").
 export const DATABASE_ID = 'familio';
 
-export const APP_VERSION = '1.8.0';
+export const APP_VERSION = '1.9.0';

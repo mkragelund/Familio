@@ -226,3 +226,40 @@ export function inNight(settings, now) {
   if (from === to) { return false; }
   return from < to ? (t >= from && t < to) : (t >= from || t < to);
 }
+
+// ---------- Pligter der skiftes mellem børnene ----------
+// En pligt med rotate skifter hver dag mellem børnene i c.kids (i den rækkefølge).
+// rotate: { from: 'YYYY-MM-DD', first: 0|1, pair: '<id på makker-pligten>', swaps: { 'YYYY-MM-DD': true } }
+// To makker-pligter (fx Dække bord / Tage af bord) har samme børn og modsat "first",
+// så hvert barn har den ene hver dag. "swaps" bytter netop den dag.
+function dayNo(ds) { var p = String(ds).split('-'); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 86400000); }
+
+export function rotates(c) { return !!(c && c.rotate && c.rotate.from && (c.kids || []).length > 1); }
+
+// Hvem har pligten på datoen? (alle i c.kids, hvis den ikke skiftes)
+export function choreKidsOn(c, ds) {
+  var ks = (c && c.kids) || [];
+  if (!rotates(c) || ds < c.rotate.from) { return ks; }
+  var r = c.rotate;
+  var i = dayNo(ds) - dayNo(r.from) + (+r.first || 0) + (r.swaps && r.swaps[ds] ? 1 : 0);
+  return [ks[((i % ks.length) + ks.length) % ks.length]];
+}
+export function choreIsFor(c, kidId, ds) { return choreKidsOn(c, ds).indexOf(kidId) >= 0; }
+
+// Sætter Dække bord / Tage af bord til at skifte, første gang appen ser familien efter opdateringen.
+// Returnerer de nye pligter, eller null hvis der ikke er noget at gøre.
+export function autoPairChores(family, todayStr) {
+  if (!family || (family.settings && family.settings.pairSetup)) { return null; }
+  var list = (family.chores || []);
+  if (list.some(rotates)) { return null; }
+  function find(re, icon) {
+    return list.filter(function (c) { return c.icon === icon || re.test(String(c.label || '').toLowerCase()); })[0];
+  }
+  var a = find(/^dæk(ke)? (bord|bordet)/, 'daek'), b = find(/^tag(e)? af bord/, 'tag');
+  if (!a || !b || a === b || (a.kids || []).length !== 2) { return null; }
+  var kids = a.kids.slice();
+  return list.map(function (c) {
+    if (c !== a && c !== b) { return c; }
+    return Object.assign({}, c, { kids: kids.slice(), rotate: { from: todayStr, first: c === a ? 0 : 1, pair: c === a ? b.id : a.id, swaps: {} } });
+  });
+}

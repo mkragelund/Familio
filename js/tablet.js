@@ -3,7 +3,7 @@ import { createStore, DEMO } from './store.js';
 import {
   ymd, parseYmd, today, addDays, mondayOf, weekDays, isoWeek, weekRangeLabel, DAY_NAMES, DAY_SHORT,
   eventsOn, timeLabel, sumPoints, periodBounds, completionId, packedId, memberById, kidsOf, inNight,
-  shortDate, monthName, MONTHS_SHORT, pad, randomCode, occursOn
+  shortDate, monthName, MONTHS_SHORT, pad, randomCode, occursOn, choreIsFor, choreKidsOn, rotates, autoPairChores
 } from './model.js';
 import { esc, pal, icon, logo, avatar, confettiHtml, pick, autoUpdate, justUpdated, toast } from './ui.js';
 import { APP_VERSION } from './config.js';
@@ -146,6 +146,8 @@ function watchFamily() {
     S.lastSoundTest = t || 0;
     S.family = fam; S.paired = !!fam; S.famError = null;
     if (fam && first) { subscribeData(); }
+    var paired = autoPairChores(fam, ymd(today()));
+    if (paired) { store.update(F(''), { chores: paired, 'settings.pairSetup': ymd(today()) }).catch(function () {}); }
     if (!fam) { requestPairing(); }
     render();
   }, function () {
@@ -214,6 +216,14 @@ function isNight() {
 // ---------- Beregninger ----------
 function kids() { return kidsOf(S.family); }
 function chores() { return (S.family && S.family.chores) || []; }
+// Barnets pligter på en dato. Pligter der skiftes, vises kun på barnets dage
+// (og altid, hvis barnet allerede har krydset den af den dag).
+function choresFor(kidId, ds) {
+  return chores().filter(function (c) {
+    if ((c.kids || []).indexOf(kidId) < 0) { return false; }
+    return choreIsFor(c, kidId, ds) || isDone(ds, c.id, kidId);
+  });
+}
 function goals(kid) {
   var g = (S.family && S.family.goals && S.family.goals[kid]) || {};
   return { weekPts: +g.weekPts || 0, weekReward: g.weekReward || '', monthPts: +g.monthPts || 0, monthReward: g.monthReward || '' };
@@ -390,7 +400,7 @@ function renderWeek(mon) {
     h += '</div><div class="chores"><span class="label" style="font-size:10px">Pligter</span>';
     kids().forEach(function (k) {
       var p = pal(k);
-      var mine = chores().filter(function (c) { return (c.kids || []).indexOf(k.id) >= 0; });
+      var mine = choresFor(k.id, ds);
       var n = 0, dots = '';
       mine.forEach(function (c) {
         var on = isDone(ds, c.id, k.id);
@@ -437,7 +447,7 @@ function renderDay() {
   h += '<div class="dv-right" style="grid-template-columns:repeat(' + Math.max(1, kids().length) + ',minmax(0,1fr))">';
   kids().forEach(function (k) {
     var p = pal(k);
-    var mine = chores().filter(function (c) { return (c.kids || []).indexOf(k.id) >= 0; });
+    var mine = choresFor(k.id, ds);
     var n = mine.filter(function (c) { return isDone(ds, c.id, k.id); }).length;
     h += '<div class="dv-kid"><button class="dv-kidhead" data-a="kid" data-kid="' + esc(k.id) + '">' + avatar(k, 36) + '<b>' + esc(k.name.split(' ')[0]) + '</b><span style="color:' + p.text + '">' + n + '/' + mine.length + '</span></button>';
     mine.forEach(function (c) {
@@ -504,6 +514,10 @@ function dueReminders() {
     if (now - t > 3 * 3600000) { return false; }
     if (remSnooze[r.id] && Date.now() < remSnooze[r.id]) { return false; }
     if (r.chore && r.who && isDone(S.day, r.chore, r.who)) { return false; }
+    if (r.chore && r.who) {
+      var rc = chores().filter(function (c) { return c.id === r.chore; })[0];
+      if (rc && !choreIsFor(rc, r.who, S.day)) { return false; }
+    }
     try { return !localStorage.getItem(remKey(r)); } catch (e) { return false; }
   });
 }
@@ -582,7 +596,7 @@ function renderChores(mon) {
   var mName = monthName(parseYmd(S.day));
   kids().forEach(function (k) {
     var p = pal(k), pt = points(k.id), g = goals(k.id);
-    var mine = chores().filter(function (c) { return (c.kids || []).indexOf(k.id) >= 0; });
+    var mine = choresFor(k.id, S.selDay);
     var dayPts = 0;
     mine.forEach(function (c) { if (isDone(S.selDay, c.id, k.id)) { dayPts += +c.pts || 0; } });
     h += '<div class="panel"><div class="panel-head">' + avatar(k, 48) + '<span class="nm">' + esc(k.name) + '</span>' +
@@ -592,12 +606,22 @@ function renderChores(mon) {
       var on = isDone(S.selDay, c.id, k.id);
       var st = on ? 'background:' + p.color + ';border-color:' + p.color + ';color:#fff' : 'background:' + p.tint + ';border-color:' + p.tint + ';color:' + p.text;
       h += '<button class="tile' + lockCls(S.selDay, on) + '" style="' + st + '" data-a="chore" data-date="' + S.selDay + '" data-chore="' + esc(c.id) + '" data-kid="' + esc(k.id) +
-        '" aria-pressed="' + on + '">' + icon(c.icon || 'star', 40, 1.8) + '<span class="l">' + esc(c.label) + '</span><span class="s">' + (on ? '✓ Klaret!' : '+' + c.pts + ' point') + '</span></button>';
+        '" aria-pressed="' + on + '">' + icon(c.icon || 'star', 40, 1.8) + '<span class="l">' + esc(c.label) + '</span><span class="s">' + (on ? '✓ Klaret!' : '+' + c.pts + ' point') + '</span>' + turnNote(c, k.id, S.selDay) + '</button>';
     });
     h += '</div></div>';
   });
   return h + '</div>';
 }
+
+// "I morgen: Ida" på pligter der skiftes, så børnene kan se, at det er på skift
+function turnNote(c, kidId, ds) {
+  if (!rotates(c)) { return ''; }
+  var nxt = choreKidsOnNext(c, ds);
+  if (!nxt) { return ''; }
+  var m = memberById(S.family, nxt);
+  return '<span class="turn">⇄ I morgen: ' + esc(nxt === kidId ? 'dig igen' : m.name.split(' ')[0]) + '</span>';
+}
+function choreKidsOnNext(c, ds) { return choreKidsOn(c, ymd(addDays(parseYmd(ds), 1)))[0]; }
 
 function renderActs(mon) {
   var h = '<div class="legend">';

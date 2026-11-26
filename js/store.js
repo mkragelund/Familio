@@ -168,7 +168,7 @@ DemoStore.prototype.seed = function () {
   var meals = ['Kylling i karry med ris', 'Frikadeller med kartofler', 'Pasta med kødsovs', 'Tacos', 'Hjemmelavet pizza', 'Fiskefrikadeller', 'Suppe og brød'];
   for (var i = 0; i < 7; i++) { var md = ymd(addDays(mon, i)); self.docs[F + '/meals/' + md] = { date: md, text: meals[i] }; }
   var t = ymd(today());
-  [['daek', ida, 5], ['laes', jc, 10]].forEach(function (c) {
+  [['tag', ida, 5], ['laes', jc, 10]].forEach(function (c) {
     self.docs[F + '/completions/' + completionId(t, c[0], c[1])] = { date: t, chore: c[0], kid: c[1], pts: c[2], at: Date.now() - 3600000 };
   });
   // Historik: de seneste 4 uger, så "Tidligere uger" har noget at vise

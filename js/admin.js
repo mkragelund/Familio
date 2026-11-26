@@ -4,7 +4,8 @@ import { APP_VERSION } from './config.js';
 import {
   ymd, parseYmd, today, addDays, mondayOf, weekDays, isoWeek, weekRangeLabel, DAY_NAMES, DAY_2,
   eventsOn, timeLabel, recurrenceLabel, sumPoints, periodBounds, memberById, kidsOf, shortDate, longDate,
-  monthName, seedFamily, newId, dow, nthOf, nthLabel, familyIdNew, randomCode, formatCode, cleanCode, adultMember, KID_COLORS, initials
+  monthName, seedFamily, newId, dow, nthOf, nthLabel, familyIdNew, randomCode, formatCode, cleanCode, adultMember, KID_COLORS, initials,
+  rotates, choreKidsOn, autoPairChores
 } from './model.js';
 import { esc, pal, icon, logo, avatar, toast, autoUpdate, justUpdated, COLOR_CHOICES, PALETTE } from './ui.js';
 import { HOLIDAYS, TYPES, OTHER_ICONS, holidaySettings, upcoming, todays } from './occasions.js';
@@ -91,6 +92,8 @@ function watchFamily() {
     S.family = fam;
     S.famState = fam ? 'ok' : 'missing';
     if (fam && first) { subscribeData(); }
+    var paired = autoPairChores(fam, ymd(today()));
+    if (paired) { fs.update('', { chores: paired, 'settings.pairSetup': ymd(today()) }).catch(function () {}); }
     render();
   }, function (err) {
     S.family = null;
@@ -339,11 +342,15 @@ function renderPoints() {
   h += '<div class="section"><span class="label">Pligter & pointværdi</span><div class="list">';
   (S.family.chores || []).forEach(function (c, i) {
     var who = (c.kids || []).map(function (id) { return memberById(S.family, id).short; }).join(' + ');
+    if (rotates(c)) {
+      var pc = pairOf(c);
+      who = 'Skiftes hver dag' + (pc ? ' med ' + pc.label.toLowerCase() : '') + ' · i dag ' + memberById(S.family, choreKidsOn(c, ymd(today()))[0]).short;
+    }
     h += '<div class="item"><span style="display:flex;color:var(--muted)">' + icon(c.icon || 'star', 22, 2) + '</span><div class="grow"><b>' + esc(c.label) + '</b><span>' + esc(who) + '</span></div>' +
       '<div class="stepper"><button data-a="chore-pts" data-i="' + i + '" data-d="-5" aria-label="Færre point">−</button><span>' + (+c.pts || 0) + '</span><button data-a="chore-pts" data-i="' + i + '" data-d="5" aria-label="Flere point">+</button></div>' +
       '<button class="iconbtn" data-a="edit-chore" data-i="' + i + '" aria-label="Rediger ' + esc(c.label) + '">' + icon('pencil', 18, 2) + '</button></div>';
   });
-  h += '</div><button class="btn dashed" data-a="new-chore">+ Ny pligt</button></div>';
+  h += '</div>' + swapBox() + '<button class="btn dashed" data-a="new-chore">+ Ny pligt</button></div>';
   h += '<p class="hint">Point tæller både til ugens og månedens mål. Nye uger starter mandag, nye måneder den 1.</p></div>';
   return h;
 }
@@ -436,6 +443,42 @@ function renderHistorySheet() {
   b += '<p class="hint">Pointene er dem, der blev givet i ugen. Ugemålet er det, der gælder nu.</p>';
   return sheetFrame('Ugens point', b);
 }
+
+// ---------- Pligter der skiftes ----------
+function pairOf(c) {
+  var id = c && c.rotate && c.rotate.pair;
+  return id ? (S.family.chores || []).filter(function (x) { return x.id === id && rotates(x); })[0] || null : null;
+}
+function firstName(id) { return memberById(S.family, id).name.split(' ')[0]; }
+// "I dag: Jens dækker bord, Ida tager af bordet" + knap til at bytte netop i dag
+function swapBox() {
+  var t = ymd(today()), seen = {}, h = '';
+  (S.family.chores || []).forEach(function (c, i) {
+    if (!rotates(c) || seen[c.id]) { return; }
+    var pc = pairOf(c);
+    seen[c.id] = true; if (pc) { seen[pc.id] = true; }
+    var txt = firstName(choreKidsOn(c, t)[0]) + ': ' + c.label.toLowerCase() + (pc ? ' · ' + firstName(choreKidsOn(pc, t)[0]) + ': ' + pc.label.toLowerCase() : '');
+    var swapped = !!(c.rotate.swaps && c.rotate.swaps[t]);
+    h += '<div class="swapbox"><div class="grow"><span class="label">I dag' + (swapped ? ' · byttet' : '') + '</span><b>' + esc(txt) + '</b></div>' +
+      '<button class="btn secondary" data-a="chore-swap" data-i="' + i + '">' + (swapped ? 'Fortryd' : 'Byt i dag') + '</button></div>';
+  });
+  return h;
+}
+function swapToday(i) {
+  var t = ymd(today()), list = (S.family.chores || []).slice(), c = list[i];
+  if (!rotates(c)) { return; }
+  var pc = pairOf(c);
+  var on = !(c.rotate.swaps && c.rotate.swaps[t]);
+  list = list.map(function (x) {
+    if (x.id !== c.id && !(pc && x.id === pc.id)) { return x; }
+    var sw = {};
+    Object.keys(x.rotate.swaps || {}).forEach(function (d) { if (d >= ymd(addDays(today(), -60)) && d !== t) { sw[d] = true; } });
+    if (on) { sw[t] = true; }
+    return Object.assign({}, x, { rotate: Object.assign({}, x.rotate, { swaps: sw }) });
+  });
+  fs.update('', { chores: list }).then(function () { toast(on ? 'Byttet for i dag' : 'Som normalt i dag'); }).catch(fail);
+}
+function noRotate(x) { var y = Object.assign({}, x); delete y.rotate; return y; }
 
 function choreLabel(id) {
   var c = (S.family.chores || []).filter(function (x) { return x.id === id; })[0];
@@ -863,7 +906,20 @@ function renderChoreForm() {
   kidsOf(S.family).forEach(function (k) {
     b += '<button class="chip" data-a="c-kid" data-v="' + k.id + '" aria-pressed="' + (f.kids.indexOf(k.id) >= 0) + '">' + esc(k.name) + '</button>';
   });
-  b += '</div></div><div class="field"><span class="label">Ikon</span><div class="chips">';
+  b += '</div></div>';
+  if (f.kids.length > 1) {
+    b += '<div class="field"><span class="label">Skiftes mellem børnene</span><div class="chips">' +
+      '<button class="chip" data-a="c-rot" data-v="0" aria-pressed="' + !f.rot + '">Nej, alle kan tage den</button>' +
+      '<button class="chip" data-a="c-rot" data-v="1" aria-pressed="' + !!f.rot + '">Ja, hver anden dag</button></div></div>';
+    if (f.rot) {
+      var cands = (S.family.chores || []).filter(function (x) { return x.id !== f.id && (x.kids || []).length > 1; });
+      b += '<div class="field"><span class="label">Makker-pligt</span><div class="chips">' +
+        '<button class="chip" data-a="c-pair" data-v="" aria-pressed="' + !f.pair + '">Ingen</button>';
+      cands.forEach(function (x) { b += '<button class="chip" data-a="c-pair" data-v="' + esc(x.id) + '" aria-pressed="' + (f.pair === x.id) + '">' + esc(x.label) + '</button>'; });
+      b += '</div><p class="hint">Med en makker-pligt har hvert barn den ene af de to hver dag, og de bytter dagen efter.</p></div>';
+    }
+  }
+  b += '<div class="field"><span class="label">Ikon</span><div class="chips">';
   ICON_CHOICES.forEach(function (ic) {
     b += '<button class="chip" style="padding:0 12px" data-a="c-icon" data-v="' + ic + '" aria-pressed="' + (f.icon === ic) + '" aria-label="Ikon ' + ic + '">' + icon(ic, 22, 2) + '</button>';
   });
@@ -1085,10 +1141,14 @@ function onClick(e) {
     case 'new-chore': S.form = { i: -1, label: '', pts: 5, kids: kidsOf(S.family).map(function (k) { return k.id; }), icon: 'star', err: '' }; S.sheet = { kind: 'chore' }; render(); break;
     case 'edit-chore':
       var c = S.family.chores[+el.getAttribute('data-i')];
-      S.form = { i: +el.getAttribute('data-i'), id: c.id, label: c.label, pts: c.pts, kids: (c.kids || []).slice(), icon: c.icon || 'star', err: '' };
+      S.form = { i: +el.getAttribute('data-i'), id: c.id, label: c.label, pts: c.pts, kids: (c.kids || []).slice(), icon: c.icon || 'star', err: '',
+        rot: rotates(c), pair: (pairOf(c) || {}).id || '' };
       S.sheet = { kind: 'chore' }; render(); break;
     case 'c-kid': var ki = f.kids.indexOf(v); if (ki >= 0) { f.kids.splice(ki, 1); } else { f.kids.push(v); } render(); break;
     case 'c-icon': f.icon = v; render(); break;
+    case 'c-rot': f.rot = v === '1'; if (!f.rot) { f.pair = ''; } render(); break;
+    case 'c-pair': f.pair = v; render(); break;
+    case 'chore-swap': swapToday(+el.getAttribute('data-i')); break;
     case 'c-save': saveChore(); break;
     case 'occ-new': S.form = { id: '', type: 'birthday', who: '', title: '', date: '', yearly: false, lead: 30, err: '' }; S.sheet = { kind: 'occ' }; render(); break;
     case 'occ-edit':
@@ -1129,6 +1189,7 @@ function onClick(e) {
     case 'c-del':
       if (window.confirm('Slet pligten "' + f.label + '"? Point, der allerede er optjent, bliver stående.')) {
         var cl = (S.family.chores || []).slice(); cl.splice(f.i, 1);
+        cl = cl.map(function (x) { return x.rotate && x.rotate.pair === f.id ? noRotate(x) : x; });
         fs.update('', { chores: cl }).then(closeSheet).catch(fail);
       }
       break;
@@ -1315,7 +1376,27 @@ function saveChore() {
   if (f.err) { render(); return; }
   var list = (S.family.chores || []).slice();
   var c = { id: f.id || newId(), label: String(f.label).trim(), pts: Math.max(0, parseInt(f.pts, 10) || 0), kids: f.kids.slice(), icon: f.icon };
-  if (f.i >= 0) { list[f.i] = Object.assign({}, list[f.i], c); } else { list.push(c); }
+  var old = f.i >= 0 ? list[f.i] : null;
+  var oldPair = old && old.rotate ? old.rotate.pair || '' : '';
+  var rot = f.rot && c.kids.length > 1;
+  var pair = rot ? f.pair || '' : '';
+  if (rot) {
+    var keep = old && rotates(old) && old.kids.join() === c.kids.join();
+    c.rotate = keep ? Object.assign({}, old.rotate, { pair: pair }) : { from: ymd(today()), first: 0, pair: pair, swaps: {} };
+  }
+  var cur = old ? noRotate(Object.assign({}, old, c)) : c;
+  if (rot) { cur.rotate = c.rotate; }
+  if (f.i >= 0) { list[f.i] = cur; } else { list.push(cur); }
+  var partner = pair ? list.filter(function (x) { return x.id === pair; })[0] : null;
+  var partnerOld = partner && partner.rotate ? partner.rotate.pair || '' : '';
+  list = list.map(function (x) {
+    // tidligere makkere slippes fri
+    if (x.id !== cur.id && x.id !== pair && x.rotate && x.rotate.pair && (x.id === oldPair || x.id === partnerOld)) { return noRotate(x); }
+    if (partner && x.id === pair) {
+      return Object.assign({}, x, { kids: cur.kids.slice(), rotate: { from: cur.rotate.from, first: ((+cur.rotate.first || 0) + 1) % cur.kids.length, pair: cur.id, swaps: Object.assign({}, cur.rotate.swaps || {}) } });
+    }
+    return x;
+  });
   fs.update('', { chores: list }).then(function () { toast('Pligten er gemt'); closeSheet(); }).catch(fail);
 }
 

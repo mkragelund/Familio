@@ -9,7 +9,7 @@ import {
 } from './model.js';
 import { esc, pal, icon, logo, avatar, toast, autoUpdate, justUpdated, COLOR_CHOICES, PALETTE } from './ui.js';
 import { HOLIDAYS, TYPES, OTHER_ICONS, holidaySettings, upcoming, todays } from './occasions.js';
-import { weatherLoc, getWeather, searchPlaces, dayBadge, forecastHtml } from './weather.js';
+import { weatherLoc, getWeather, searchPlaces, dayBadge, forecastHtml, snowToday, setSnow } from './weather.js';
 
 var store;
 var HISTORY_WEEKS = 8;
@@ -153,6 +153,7 @@ function render() {
   h += '</div>' + renderTabbar();
   if (S.sheet) { h += renderSheet(); }
   app.innerHTML = h;
+  setSnow(snowToday(wx()), 18);   // snefnug på snevejrsdage
   window.scrollTo(0, scroll);
   var sb = document.querySelector('.sheet-body');
   if (sb) { sb.scrollTop = sheetScroll; }

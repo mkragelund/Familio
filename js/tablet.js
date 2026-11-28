@@ -9,7 +9,7 @@ import { esc, pal, icon, logo, avatar, confettiHtml, pick, autoUpdate, justUpdat
 import { APP_VERSION } from './config.js';
 import { play, unlockAudio } from './sound.js';
 import { countdowns, todays, countdownText, candleDay, candleSvg, wreathSvg, adventLit, holidaySettings, occArt } from './occasions.js';
-import { weatherLoc, getWeather, dayWeather, wxIcon, wxText, deg, dayBadge, forecastHtml } from './weather.js';
+import { weatherLoc, getWeather, dayWeather, wxIcon, wxText, deg, dayBadge, forecastHtml, snowToday, setSnow } from './weather.js';
 function sfx(name) { play(name, S.family && S.family.settings, S.dimShown); }
 // Vejrudsigten for familiens sted (null hvis intet sted er valgt). Ny udsigt → tegn igen.
 function wx() { return getWeather(weatherLoc(S.family), function () { render(); }); }
@@ -279,6 +279,7 @@ function render() {
   setThemeColor(S.nightShown ? '#0B0D12' : S.dimShown ? '#000000' : '#1F2430');
   if (S.dimShown) { releaseWake(); }
   app.innerHTML = html;
+  setSnow(!S.nightShown && snowToday(wx()), 32);   // snefnug på snevejrsdage – ikke om natten
   renderPanel();
   checkParty();
 }

@@ -223,6 +223,7 @@ function demoWeather() {
     hours.push({ t: ymd(dd) + 'T' + pad(hr) + ':00', temp: dw.min + (dw.max - dw.min) * (1 - curve), code: hc, rain: dw.code >= 51 && hr >= 9 && hr <= 18 ? dw.rain : Math.round(dw.rain / 3), day: hr >= 8 && hr < 16 });
   }
   var td = days[ymd(today())];
+  if (/[?&]sne(=|&|$)/.test(location.search)) { td.code = 73; td.max = 1; td.min = -2; }   // demo: sne i dag
   var h = new Date().getHours();
   return { cur: { t: td.min + 2.3, code: td.code, day: h >= 7 && h < 17 }, days: days, hours: hours, demo: true };
 }
@@ -315,4 +316,41 @@ function adviceFor(list) {
   var best = list.filter(function (x) { return x.i > 0 && x.w.code <= 2 && x.w.rain < 30; })[0];
   if (best && tips.length < 4) { tips.push({ ds: best.ds, text: '☀️ Tørt og lyst ' + dayWord(best), title: '' }); }
   return tips;
+}
+
+// ---------- Sne på skærmen ----------
+// Når udsigten for i dag viser sne, falder der stille snefnug ned over hele skærmen.
+// Laget ligger uden for selve appen, så animationen ikke starter forfra, hver gang skærmen tegnes,
+// og det tager aldrig imod tryk (pointer-events: none). Kun transform animeres – let for en gammel iPad.
+export function isSnowCode(code) { return (code >= 71 && code <= 77) || code === 85 || code === 86; }
+export function snowToday(data) {
+  if (!data) { return false; }
+  var w = dayWeather(data, ymd(today()));
+  return !!((w && isSnowCode(w.code)) || (data.cur && isSnowCode(data.cur.code)));
+}
+
+var FLAKE = '<svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true"><g fill="none" stroke="#8FB6E8" stroke-width="2" stroke-linecap="round">' +
+  '<path d="M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10"/><path d="M9.5 3.8 12 6l2.5-2.2M9.5 20.2 12 18l2.5 2.2M3.6 10.2l3.3-.7-1-3.2M20.4 13.8l-3.3.7 1 3.2M3.6 13.8l3.3.7-1 3.2M20.4 10.2l-3.3-.7 1-3.2"/></g></svg>';
+var snowEl = null, snowN = 0;
+export function setSnow(on, n) {
+  if (!on || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+    if (snowEl) { snowEl.parentNode.removeChild(snowEl); snowEl = null; }
+    return;
+  }
+  if (snowEl && snowN === n) { return; }
+  if (snowEl) { snowEl.parentNode.removeChild(snowEl); }
+  snowN = n;
+  var h = '';
+  for (var i = 0; i < n; i++) {
+    var big = i % 4 === 0;                       // hvert fjerde fnug er et lille krystal, resten bløde prikker
+    var size = big ? 18 + (i * 7) % 10 : 6 + (i * 5) % 6;
+    var dur = 10 + (i * 7) % 9;                  // 10–18 sek. fra top til bund – roligt
+    h += '<span class="flake' + (big ? ' xl' : '') + (i % 2 ? ' l' : '') + '" style="left:' + ((i * 37 + 11) % 100) + '%;width:' + size + 'px;height:' + size + 'px;' +
+      'opacity:' + (big ? .7 : .6 + (i % 3) * .12).toFixed(2) + ';animation-duration:' + dur + 's;animation-delay:-' + ((i * 2.3) % dur).toFixed(1) + 's">' + (big ? FLAKE : '') + '</span>';
+  }
+  snowEl = document.createElement('div');
+  snowEl.className = 'snowfall';
+  snowEl.setAttribute('aria-hidden', 'true');
+  snowEl.innerHTML = h;
+  document.body.appendChild(snowEl);
 }

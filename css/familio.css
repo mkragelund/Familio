@@ -541,3 +541,11 @@ html.dark, html.dark body { background: #000; }
 .swapbox .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .swapbox b { font-size: 14px; line-height: 1.3; }
 .swapbox .btn { flex: none; }
+/* Sne på snevejrsdage – ligger over alt, men tager aldrig imod tryk */
+.snowfall { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; overflow: hidden; z-index: 70; }
+.snowfall .flake { position: absolute; top: -30px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(120,160,215,.5), 0 1px 3px rgba(70,100,150,.35); will-change: transform; animation: flake-r linear infinite; }
+.snowfall .flake.l { animation-name: flake-l; }
+.snowfall .flake.xl { background: none; box-shadow: none; }
+.dark .snowfall .flake.xl svg g { stroke: #fff; }
+@keyframes flake-r { 0% { transform: translate3d(0, 0, 0) rotate(0deg); } 50% { transform: translate3d(24px, 55vh, 0) rotate(90deg); } 100% { transform: translate3d(4px, 112vh, 0) rotate(180deg); } }
+@keyframes flake-l { 0% { transform: translate3d(0, 0, 0) rotate(0deg); } 50% { transform: translate3d(-24px, 55vh, 0) rotate(-90deg); } 100% { transform: translate3d(-4px, 112vh, 0) rotate(-180deg); } }
